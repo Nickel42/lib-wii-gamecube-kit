@@ -1,0 +1,168 @@
+diff -ruN a/Core/Core/IOS/ES/Formats.cpp b/Core/Core/IOS/ES/Formats.cpp
+--- a/Source/Core/Core/IOS/ES/Formats.cpp	2026-10-18 20:19:09.071449600 -0700
++++ b/Source/Core/Core/IOS/ES/Formats.cpp	2026-10-18 20:19:09.409621800 -0700
+@@ -26,9 +26,11 @@
+ #include "Common/Swap.h"
+ #include "Core/CommonTitles.h"
+ #include "Core/IOS/Device.h"
++#ifndef DRVZ_BUILD  // libdolphinrvz: no emulated NAND
+ #include "Core/IOS/FS/FileSystem.h"
+ #include "Core/IOS/FS/FileSystemProxy.h"
+ #include "Core/IOS/IOS.h"
++#endif
+ #include "Core/IOS/IOSC.h"
+ #include "Core/IOS/Uids.h"
+ 
+@@ -541,6 +543,7 @@
+   m_bytes[offsetof(Ticket, common_key_index)] = index;
+ }
+ 
++#ifndef DRVZ_BUILD
+ struct SharedContentMap::Entry
+ {
+   // ID string
+@@ -709,6 +712,8 @@
+   return uid;
+ }
+ 
++#endif
++
+ CertReader::CertReader(std::vector<u8>&& bytes) : SignedBlobReader(std::move(bytes))
+ {
+   if (!IsSignatureValid())
+diff -ruN a/Core/Core/IOS/ES/Formats.h b/Core/Core/IOS/ES/Formats.h
+--- a/Source/Core/Core/IOS/ES/Formats.h	2026-10-18 20:19:09.071449600 -0700
++++ b/Source/Core/Core/IOS/ES/Formats.h	2026-10-18 20:19:09.430557300 -0700
+@@ -276,6 +276,7 @@
+   void OverwriteCommonKeyIndex(u8 index);
+ };
+ 
++#ifndef DRVZ_BUILD  // libdolphinrvz: no emulated NAND
+ class SharedContentMap final
+ {
+ public:
+@@ -316,6 +317,8 @@
+   u64 m_ticks = 0;
+ };
+ 
++#endif
++
+ class CertReader final : public SignedBlobReader
+ {
+ public:
+diff -ruN a/Core/Core/IOS/IOSC.cpp b/Core/Core/IOS/IOSC.cpp
+--- a/Source/Core/Core/IOS/IOSC.cpp	2026-10-18 20:19:09.071449600 -0700
++++ b/Source/Core/Core/IOS/IOSC.cpp	2026-10-18 20:19:09.435869200 -0700
+@@ -208,7 +208,9 @@
+ IOSC::IOSC(ConsoleType console_type) : m_console_type(console_type)
+ {
+   LoadDefaultEntries();
++#ifndef DRVZ_BUILD  // libdolphinrvz: built-in keys only, never a user keys.bin
+   LoadEntries();
++#endif
+ }
+ 
+ IOSC::~IOSC() = default;
+diff -ruN a/Core/DiscIO/Blob.cpp b/Core/DiscIO/Blob.cpp
+--- a/Source/Core/DiscIO/Blob.cpp	2026-10-18 20:19:09.097716200 -0700
++++ b/Source/Core/DiscIO/Blob.cpp	2026-10-18 20:19:09.446397700 -0700
+@@ -15,7 +15,9 @@
+ 
+ #include "DiscIO/CISOBlob.h"
+ #include "DiscIO/CompressedBlob.h"
++#ifndef DRVZ_BUILD  // libdolphinrvz: no extracted-folder input
+ #include "DiscIO/DirectoryBlob.h"
++#endif
+ #include "DiscIO/FileBlob.h"
+ #include "DiscIO/NFSBlob.h"
+ #include "DiscIO/SplitFileBlob.h"
+@@ -242,8 +244,10 @@
+   case NFS_MAGIC:
+     return NFSFileReader::Create(std::move(file), filename);
+   default:
++#ifndef DRVZ_BUILD
+     if (auto directory_blob = DirectoryBlobReader::Create(filename))
+       return std::move(directory_blob);
++#endif
+     if (auto split_blob = SplitPlainFileReader::Create(filename))
+       return std::move(split_blob);
+ 
+diff -ruN a/Core/DiscIO/MultithreadedCompressor.h b/Core/DiscIO/MultithreadedCompressor.h
+--- a/Source/Core/DiscIO/MultithreadedCompressor.h	2026-10-18 20:19:09.081044900 -0700
++++ b/Source/Core/DiscIO/MultithreadedCompressor.h	2026-10-18 20:19:09.525696000 -0700
+@@ -12,6 +12,9 @@
+ 
+ #include "Common/Assert.h"
+ #include "Common/Event.h"
++#ifdef DRVZ_BUILD
++#include "drvz_hooks.h"
++#endif
+ 
+ namespace DiscIO
+ {
+@@ -46,7 +49,11 @@
+       std::function<ConversionResultCode(OutputParameters)> output)
+       : m_set_up_compress_thread_state(std::move(set_up_compress_thread_state)),
+         m_compress(std::move(compress)), m_output(std::move(output)),
++#ifdef DRVZ_BUILD  // libdolphinrvz: the caller picks the thread count
++        m_threads(drvz::CompressorThreadCount())
++#else
+         m_threads(std::max<unsigned int>(1, std::thread::hardware_concurrency()))
++#endif
+   {
+     m_compress_threads = std::make_unique<CompressThread[]>(m_threads);
+ 
+diff -ruN a/Core/DiscIO/Volume.cpp b/Core/DiscIO/Volume.cpp
+--- a/Source/Core/DiscIO/Volume.cpp	2026-10-18 20:19:09.081044900 -0700
++++ b/Source/Core/DiscIO/Volume.cpp	2026-10-18 20:19:09.573243900 -0700
+@@ -18,16 +18,22 @@
+ #include "Common/Crypto/SHA1.h"
+ #include "Common/StringUtil.h"
+ 
++#ifndef DRVZ_BUILD  // libdolphinrvz: no emulator config
+ #include "Core/Config/MainSettings.h"
++#endif
+ #include "Core/IOS/ES/Formats.h"
+ 
+ #include "DiscIO/Blob.h"
++#ifndef DRVZ_BUILD  // libdolphinrvz: no CachedBlob or WADs
+ #include "DiscIO/CachedBlob.h"
++#endif
+ #include "DiscIO/DiscUtils.h"
+ #include "DiscIO/Enums.h"
+ #include "DiscIO/VolumeDisc.h"
+ #include "DiscIO/VolumeGC.h"
++#ifndef DRVZ_BUILD
+ #include "DiscIO/VolumeWad.h"
++#endif
+ #include "DiscIO/VolumeWii.h"
+ 
+ namespace DiscIO
+@@ -138,6 +144,7 @@
+   return CreateDisc(CreateBlobReader(path));
+ }
+ 
++#ifndef DRVZ_BUILD  // libdolphinrvz: discs only
+ std::unique_ptr<VolumeDisc> CreateDiscForCore(const std::string& path)
+ {
+   auto reader = CreateBlobReader(path);
+@@ -173,15 +180,19 @@
+   return CreateWAD(CreateBlobReader(path));
+ }
+ 
++#endif
++
+ std::unique_ptr<Volume> CreateVolume(std::unique_ptr<BlobReader> reader)
+ {
+   std::unique_ptr<VolumeDisc> disc = TryCreateDisc(reader);
+   if (disc)
+     return disc;
+ 
++#ifndef DRVZ_BUILD
+   std::unique_ptr<VolumeWAD> wad = TryCreateWAD(reader);
+   if (wad)
+     return wad;
++#endif
+ 
+   return nullptr;
+ }
