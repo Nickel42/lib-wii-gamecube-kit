@@ -17,7 +17,7 @@ Dolphin's emulator, config system, user directory or UI.
 
 The code is Dolphin's own (vendored from one pinned commit and lightly
 patched, see `vendor/PATCHES.md`), so its output should be identical to
-DolphinTool's for the same settings.
+DolphinTool's for the same settings (checked byte for byte, see `scripts/parity.py`).
 
 ## API
 

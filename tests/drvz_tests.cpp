@@ -51,6 +51,12 @@ int g_checks = 0;
 drvz_context* g_ctx = nullptr;
 fs::path g_dir;
 
+// A path from a UTF-8 string (std::filesystem::u8path is deprecated in C++20).
+fs::path U8(const std::string& s)
+{
+  return fs::path(std::u8string(s.begin(), s.end()));
+}
+
 std::string P(const char* name)
 {
   const std::u8string u8 = (g_dir / fs::path(std::u8string(reinterpret_cast<const char8_t*>(name)))).u8string();
@@ -170,7 +176,7 @@ void TestProbe(const std::string& gc_iso, const std::string& wii_iso)
   CHECK(std::strcmp(info.maker_id, "01") == 0);
   CHECK(std::strcmp(info.internal_name, "libdolphinrvz GameCube test disc") == 0);
   CHECK(info.region == DRVZ_REGION_NTSC_U);
-  CHECK(info.data_size == fs::file_size(fs::u8path(gc_iso)) && info.data_size_is_exact);
+  CHECK(info.data_size == fs::file_size(U8(gc_iso)) && info.data_size_is_exact);
   CHECK(!info.is_nkit && !info.is_datel && info.is_scrubbable);
 
   drvz_disc_info_init(&info);
@@ -202,7 +208,7 @@ void RoundTrip(const std::string& iso, const char* tag, drvz_format format,
   ResetObservations();
   CHECK_STATUS(Convert(iso, packed, format, compression, level, block_size), DRVZ_OK);
   CHECK(!g_fractions.empty() && g_fractions.back() == 1.0);
-  CHECK(fs::exists(fs::u8path(packed)));
+  CHECK(fs::exists(U8(packed)));
 
   drvz_disc_info info;
   drvz_disc_info_init(&info);
@@ -223,10 +229,10 @@ void RoundTrip(const std::string& iso, const char* tag, drvz_format format,
   CHECK_STATUS(Convert(packed, back, DRVZ_FORMAT_ISO, DRVZ_COMPRESSION_NONE, 0, 0), DRVZ_OK);
   CHECK(SameFile(iso, back));
   std::printf("  %-28s %9llu -> %9llu bytes\n", tag,
-              static_cast<unsigned long long>(fs::file_size(fs::u8path(iso))),
-              static_cast<unsigned long long>(fs::file_size(fs::u8path(packed))));
-  fs::remove(fs::u8path(packed));
-  fs::remove(fs::u8path(back));
+              static_cast<unsigned long long>(fs::file_size(U8(iso))),
+              static_cast<unsigned long long>(fs::file_size(U8(packed))));
+  fs::remove(U8(packed));
+  fs::remove(U8(back));
 }
 
 void TestRoundTrips(const std::string& gc_iso, const std::string& wii_iso)
@@ -252,11 +258,11 @@ void TestRvzPacksJunk(const std::string& gc_iso)
   const std::string rvz = P("packing.rvz");
   ResetObservations();
   CHECK_STATUS(Convert(gc_iso, rvz, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 5, 0x20000), DRVZ_OK);
-  const auto iso_size = fs::file_size(fs::u8path(gc_iso));
-  const auto rvz_size = fs::file_size(fs::u8path(rvz));
+  const auto iso_size = fs::file_size(U8(gc_iso));
+  const auto rvz_size = fs::file_size(U8(rvz));
   CHECK(rvz_size * 10 < iso_size);
   CHECK(g_last_ratio > 0.0 && g_last_ratio < 0.2);
-  fs::remove(fs::u8path(rvz));
+  fs::remove(U8(rvz));
 }
 
 void TestDeterministic(const std::string& wii_iso)
@@ -270,14 +276,14 @@ void TestDeterministic(const std::string& wii_iso)
   CHECK_STATUS(Convert(wii_iso, b, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 3, 0x20000), DRVZ_OK);
   drvz_context_set_num_threads(g_ctx, 0);
   CHECK(SameFile(a, b));
-  fs::remove(fs::u8path(a));
-  fs::remove(fs::u8path(b));
+  fs::remove(U8(a));
+  fs::remove(U8(b));
 }
 
 void TestValidation(const std::string& gc_iso)
 {
   const std::string out = P("validation.rvz");
-  fs::remove(fs::u8path(out));
+  fs::remove(U8(out));
   CHECK_STATUS(Convert(gc_iso, out, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 5, 0x30000),
                DRVZ_ERR_INVALID_ARGUMENT);
   CHECK_STATUS(Convert(gc_iso, out, DRVZ_FORMAT_WIA, DRVZ_COMPRESSION_ZSTD, 5, 0x200000),
@@ -292,7 +298,7 @@ void TestValidation(const std::string& gc_iso)
                DRVZ_ERR_INVALID_ARGUMENT);
   CHECK_STATUS(Convert(P("missing.iso"), out, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 5, 0x20000),
                DRVZ_ERR_FILE_OPEN);
-  CHECK(!fs::exists(fs::u8path(out)));
+  CHECK(!fs::exists(U8(out)));
 
   drvz_convert_options o;
   drvz_convert_options_init(&o);
@@ -304,12 +310,12 @@ void TestValidation(const std::string& gc_iso)
   synth::WriteFile(out, std::vector<u8>(100, 1));
   CHECK_STATUS(Convert(gc_iso, out, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 5, 0x20000, false),
                DRVZ_ERR_FILE_EXISTS);
-  CHECK(fs::file_size(fs::u8path(out)) == 100);
+  CHECK(fs::file_size(U8(out)) == 100);
   CHECK_STATUS(Convert(gc_iso, out, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 5, 0x20000, true),
                DRVZ_OK);
-  CHECK(fs::file_size(fs::u8path(out)) > 100);
+  CHECK(fs::file_size(U8(out)) > 100);
   CHECK(std::strcmp(drvz_last_error(g_ctx), "") == 0);
-  fs::remove(fs::u8path(out));
+  fs::remove(U8(out));
 
   // Not a disc.
   CHECK_STATUS(Convert(P("not-a-disc.iso"), out, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 5, 0x20000),
@@ -322,14 +328,14 @@ void TestValidation(const std::string& gc_iso)
   for (const std::string& line : g_log)
     warned |= line.find("Block size is not ideal") != std::string::npos;
   CHECK(warned);
-  fs::remove(fs::u8path(out));
+  fs::remove(U8(out));
   CHECK(NoTempFiles());
 }
 
 void TestCancel(const std::string& wii_iso)
 {
   const std::string out = P("cancelled.rvz");
-  fs::remove(fs::u8path(out));
+  fs::remove(U8(out));
 
   // From the progress callback, part way through.
   ResetObservations();
@@ -338,7 +344,7 @@ void TestCancel(const std::string& wii_iso)
   CHECK_STATUS(Convert(wii_iso, out, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 5, 0x8000),
                DRVZ_ERR_CANCELLED);
   drvz_context_set_num_threads(g_ctx, 0);
-  CHECK(!fs::exists(fs::u8path(out)));
+  CHECK(!fs::exists(U8(out)));
   CHECK(NoTempFiles());
 
   // Requested before the call: fails before any work, and the request is then cleared.
@@ -365,13 +371,13 @@ void TestScrub(const std::string& gc_iso)
                DRVZ_OK);
   CHECK_STATUS(Convert(out, iso, DRVZ_FORMAT_ISO, DRVZ_COMPRESSION_NONE, 0, 0), DRVZ_OK);
   // Scrubbing zeroes the junk, so the image changes but keeps its size and files.
-  CHECK(fs::file_size(fs::u8path(iso)) == fs::file_size(fs::u8path(gc_iso)));
+  CHECK(fs::file_size(U8(iso)) == fs::file_size(U8(gc_iso)));
   CHECK(!SameFile(iso, gc_iso));
   const std::vector<u8> a = synth::ReadFile(gc_iso);
   const std::vector<u8> b = synth::ReadFile(iso);
   CHECK(a.size() == b.size() && std::equal(a.begin() + 0x100000, a.begin() + 0x280000, b.begin() + 0x100000));
-  fs::remove(fs::u8path(out));
-  fs::remove(fs::u8path(iso));
+  fs::remove(U8(out));
+  fs::remove(U8(iso));
 }
 
 void TestUnicodePaths(const std::string& gc_iso)
@@ -382,7 +388,7 @@ void TestUnicodePaths(const std::string& gc_iso)
   const std::u8string out8 = (dir / fs::path(u8"ディスク.rvz")).u8string();
   const std::string in(in8.begin(), in8.end());
   const std::string out(out8.begin(), out8.end());
-  fs::copy_file(fs::u8path(gc_iso), fs::path(in8), fs::copy_options::overwrite_existing);
+  fs::copy_file(U8(gc_iso), fs::path(in8), fs::copy_options::overwrite_existing);
   CHECK_STATUS(Convert(in, out, DRVZ_FORMAT_RVZ, DRVZ_COMPRESSION_ZSTD, 5, 0x20000), DRVZ_OK);
   drvz_disc_info info;
   drvz_disc_info_init(&info);
@@ -394,7 +400,7 @@ void TestUnicodePaths(const std::string& gc_iso)
 
 int main(int argc, char** argv)
 {
-  g_dir = argc > 1 ? fs::u8path(argv[1]) : fs::current_path() / "drvz_test_work";
+  g_dir = argc > 1 ? U8(argv[1]) : fs::current_path() / "drvz_test_work";
   fs::create_directories(g_dir);
 
   if (drvz_context_create(&g_ctx) != DRVZ_OK)

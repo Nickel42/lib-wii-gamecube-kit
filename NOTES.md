@@ -25,17 +25,25 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
   with libstdc++ linked statically, needs nothing but libc.
 - The C# binding (`bindings/csharp/LibDolphinRvz`) and the NoIntrovert
   integration are done; the app's self-test covers them on Windows x64.
+- **Parity with stock DolphinTool: 51 of 51 outputs byte-identical**
+  (`scripts/parity.py`), on the three synthetic discs (GameCube, Wii with a
+  wrong hash, clean Wii) for RVZ zstd 1/5/19, LZMA, LZMA2, bzip2 and none,
+  scrubbed RVZ, WIA LZMA/LZMA2/bzip2/none, GCZ 16/32 KiB and decoding back to
+  ISO. DolphinTool was built from Dolphin at `vendor/DOLPHIN_COMMIT` with
+  MSVC, target `dolphin-tool` only:
+
+      git submodule update --init --depth 1   # all but Qt, FFmpeg-bin, mGBA, SDL, rcheevos, libadrenotools
+      cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_QT=OFF -DENABLE_TESTS=OFF \
+        -DENCODE_FRAMEDUMPS=OFF -DUSE_DISCORD_PRESENCE=OFF -DUSE_MGBA=OFF -DENABLE_AUTOUPDATE=OFF \
+        -DUSE_RETRO_ACHIEVEMENTS=OFF -DENABLE_ANALYTICS=OFF -DUSE_UPNP=OFF -DENABLE_SDL=OFF \
+        -DENABLE_LLVM=OFF -DENABLE_CUBEB=OFF
+      cmake --build build --target dolphin-tool
 
 **Not done yet:**
 
-1. **Parity with stock DolphinTool** (byte-identical output for the same
-   input and settings). It is the same code, but no reference DolphinTool was
-   built or downloaded here. Build Dolphin's `dolphin-tool` at
-   `vendor/DOLPHIN_COMMIT`, or use the matching official build, and compare
-   on the synthetic discs and a few real ones.
-2. **Real discs.** Only synthetic discs have been tested. Try real GameCube
+1. **Real discs.** Only synthetic discs have been tested. Try real GameCube
    and Wii dumps (single and dual layer), checking hashes against Redump.
-3. **Windows ARM64 and macOS** have build scripts (`build-win.cmd arm64`,
+2. **Windows ARM64 and macOS** have build scripts (`build-win.cmd arm64`,
    `build-mac.sh`: one CMake build per architecture, merged with `lipo`)
    and release-CI steps, but have not been built yet: this machine has no
    ARM64 MSVC tools and no Mac. The first CI run will tell. macOS needs
