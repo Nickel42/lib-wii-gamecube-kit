@@ -73,6 +73,10 @@ if(DRVZ_ARCH STREQUAL "x86_64")
 else()
   list(APPEND _drvz_dolphin_sources "${DOLPHIN_SRC}/Common/ArmCPUDetect.cpp")
 endif()
+# Windows-only helper (ArmCPUDetect reads the CPU name from the registry).
+if(NOT WIN32)
+  list(FILTER _drvz_dolphin_sources EXCLUDE REGEX "/Common/WindowsRegistry\\.cpp$")
+endif()
 
 add_library(drvz_dolphin STATIC
   ${_drvz_dolphin_sources}
@@ -107,6 +111,11 @@ else()
   target_compile_options(drvz_dolphin PRIVATE -Wno-deprecated-declarations)
   find_package(Threads REQUIRED)
   target_link_libraries(drvz_dolphin PUBLIC Threads::Threads)
+endif()
+if(APPLE)
+  # FileUtil uses CoreFoundation for the bundle path; StringUtil uses iconv,
+  # which macOS keeps in its own library (glibc has it built in).
+  target_link_libraries(drvz_dolphin PUBLIC "-framework CoreFoundation" iconv)
 endif()
 
 # ------------------------------------------------------------- the library

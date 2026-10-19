@@ -74,6 +74,7 @@ core_files=(
   Common/Random.cpp Common/Random.h Common/SPSCQueue.h Common/ScopeGuard.h
   Common/StringUtil.cpp Common/StringUtil.h Common/Swap.h Common/Timer.cpp Common/Timer.h
   Common/TypeUtils.h
+  Common/WindowsRegistry.cpp Common/WindowsRegistry.h  # ArmCPUDetect on Windows ARM64
   # Core: ticket/TMD parsing and the Wii common keys (both patched, see PATCHES.md)
   Core/CommonTitles.h
   Core/IOS/ES/Formats.cpp Core/IOS/ES/Formats.h
