@@ -8,6 +8,13 @@
 
 #include "dolphinrvz.h"
 
+/* The C# binding (bindings/csharp/LibDolphinRvz/Native.cs) hard-codes these. */
+#if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
+_Static_assert(sizeof(drvz_disc_info) == 376, "drvz_disc_info layout changed: update Native.cs");
+_Static_assert(sizeof(drvz_convert_options) == 48, "drvz_convert_options layout changed: update Native.cs");
+_Static_assert(sizeof(drvz_hash_result) == 112, "drvz_hash_result layout changed: update Native.cs");
+#endif
+
 int main(int argc, char **argv)
 {
 	drvz_context *ctx = NULL;

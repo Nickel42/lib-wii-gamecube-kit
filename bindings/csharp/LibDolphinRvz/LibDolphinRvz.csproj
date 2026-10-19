@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    .NET binding for libdolphinrvz. NoIntrovert references this project
+    directly and ships the native library (dolphinrvz.dll,
+    libdolphinrvz.dylib or libdolphinrvz.so) next to the app itself.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>LibDolphinRvz</RootNamespace>
+    <AssemblyName>LibDolphinRvz</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <Version>0.1.0</Version>
+    <Description>Dolphin's GameCube/Wii disc image conversion (RVZ, WIA, GCZ, ISO) as a .NET library.</Description>
+    <PackageLicenseExpression>GPL-2.0-or-later</PackageLicenseExpression>
+  </PropertyGroup>
+
+</Project>
