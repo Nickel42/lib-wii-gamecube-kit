@@ -121,6 +121,24 @@ cp "$ext/zlib-ng/CMakeLists.txt" "$ext/zlib-ng/zconf.h" "$ext/zlib-ng/zlib.h" "$
 copy_tree "$ext/zlib-ng/zlib-ng" "$dst/externals/zlib-ng/zlib-ng" --exclude=test --exclude=doc --exclude=.github --exclude=tools
 cp "$ext/licenses.md" "$dst/externals/dolphin-externals-licenses.md"
 
+# Every bundled license in one file, shipped with release downloads.
+{
+  echo "Licenses of the code bundled in libdolphinrvz (see THIRD_PARTY_NOTICES.md)."
+  for entry in \
+      "Dolphin (COPYING):dolphin/COPYING" \
+      "Dolphin (GPL-2.0-or-later):dolphin/LICENSES/GPL-2.0-or-later.txt" \
+      "Dolphin (CC0-1.0, LaggedFibonacciGenerator):dolphin/LICENSES/CC0-1.0.txt" \
+      "zstd:externals/zstd/zstd/LICENSE" \
+      "bzip2:externals/bzip2/bzip2/LICENSE" \
+      "liblzma (XZ Utils):externals/liblzma/COPYING" \
+      "zlib-ng:externals/zlib-ng/zlib-ng/LICENSE.md" \
+      "{fmt}:externals/fmt/fmt/LICENSE" \
+      "Mbed TLS:externals/mbedtls/LICENSE"; do
+    printf '\n\n==================== %s ====================\n\n' "${entry%%:*}"
+    sed 's/\r$//' "$dst/${entry#*:}"
+  done
+} > "$dst/BUNDLED_LICENSES.txt"
+
 # Our changes to the Dolphin sources (see vendor/PATCHES.md).
 for p in "$here"/patches/*.patch; do
   [ -e "$p" ] || continue

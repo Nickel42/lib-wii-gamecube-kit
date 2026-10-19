@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.22)
 
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
@@ -123,8 +123,10 @@ if(APPLE)
   target_link_options(dolphinrvz PRIVATE
     "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/src/dolphinrvz.exports")
 elseif(UNIX)
+  # Static libstdc++: the .so then only needs the build machine's glibc.
   target_link_options(dolphinrvz PRIVATE
-    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/dolphinrvz.map" "-Wl,--no-undefined")
+    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/dolphinrvz.map" "-Wl,--no-undefined"
+    -static-libstdc++ -static-libgcc)
 endif()
 set_target_properties(dolphinrvz PROPERTIES
   OUTPUT_NAME dolphinrvz

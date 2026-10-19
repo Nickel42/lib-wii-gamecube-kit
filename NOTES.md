@@ -20,6 +20,11 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
   which survives the round trip (hash exceptions work).
 - RVZ junk packing works: an 8 MiB synthetic GameCube disc that is mostly
   junk becomes 243 KB.
+- Linux x64: `scripts/build-linux.sh` builds and passes ctest 4/4 with GCC 15
+  (WSL Ubuntu 26.04). The .so exports only the 18 `drvz_*` functions and,
+  with libstdc++ linked statically, needs nothing but libc.
+- The C# binding (`bindings/csharp/LibDolphinRvz`) and the NoIntrovert
+  integration are done; the app's self-test covers them on Windows x64.
 
 **Not done yet:**
 
@@ -30,13 +35,13 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
    on the synthetic discs and a few real ones.
 2. **Real discs.** Only synthetic discs have been tested. Try real GameCube
    and Wii dumps (single and dual layer), checking hashes against Redump.
-3. **Windows ARM64, macOS (arm64 + x86_64, merged with lipo) and Linux
-   x64** builds. The CMake has the architecture switches, but only x64
-   Windows has been built. A macOS universal build must be one CMake build
-   per architecture (Dolphin selects CPU code by `_M_X86_64` / `_M_ARM_64`),
-   merged with `lipo`. `build-mac.sh` and `build-linux.sh` still need writing.
-4. The C# binding (`bindings/csharp/`, empty) and the NoIntrovert
-   integration (Phases 2-3 of the plan).
+3. **Windows ARM64 and macOS** have build scripts (`build-win.cmd arm64`,
+   `build-mac.sh`: one CMake build per architecture, merged with `lipo`)
+   and release-CI steps, but have not been built yet: this machine has no
+   ARM64 MSVC tools and no Mac. The first CI run will tell. macOS needs
+   AppleClang 21+ (Dolphin's minimum); CI picks the newest non-beta Xcode.
+   Linux CI uses g++-12 on Ubuntu 22.04, which is older than the GCC 15 it
+   was tried with here.
 
 ## Things worth knowing
 

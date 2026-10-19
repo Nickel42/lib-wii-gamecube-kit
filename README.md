@@ -52,8 +52,8 @@ failed or cancelled conversion leaves nothing behind.
 
 ## Building
 
-CMake 3.25+ and a C++23 compiler (Visual Studio 2022 17.10+ or 2026, recent
-Clang or GCC). All dependencies are in `vendor/`.
+CMake 3.22+ and a C++23 compiler (Visual Studio 2022 17.10+ or 2026, GCC 12+,
+Clang 18+ or AppleClang 21+, as Dolphin needs). All dependencies are in `vendor/`.
 
 ```
 scripts\build-win.cmd x64          # or arm64; output in ..\out\win-<arch>
