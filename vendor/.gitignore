@@ -1,0 +1,4 @@
+# Vendored sources are committed whole. This undoes the app's Visual Studio
+# ignore rules (x86/, ARM/, Win32/, Makefile.in, ...) for everything in vendor/.
+!*
+!*/
