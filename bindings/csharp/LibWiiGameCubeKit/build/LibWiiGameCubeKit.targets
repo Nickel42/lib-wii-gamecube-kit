@@ -1,0 +1,63 @@
+<Project>
+  <!--
+    For apps that reference LibWiiGameCubeKit.csproj directly (a checkout or a
+    git submodule) instead of the NuGet package: import this file to ship the
+    native library for the platform being built next to the app.
+
+      <Import Project="<checkout>/bindings/csharp/LibWiiGameCubeKit/build/LibWiiGameCubeKit.targets" />
+
+    The library is taken from <checkout>/artifacts/native/<dir>, where the
+    scripts in scripts/ put it. <dir> follows the RuntimeIdentifier:
+
+      win-x64        -> win-x64/wiigckit.dll
+      win-arm64      -> win-arm64/wiigckit.dll
+      osx-*          -> osx/libwiigckit.dylib   (universal arm64 + x86_64)
+      linux-x64      -> linux-x64/libwiigckit.so
+      linux-arm64    -> linux-arm64/libwiigckit.so
+      android-arm64  -> android-arm64/libwiigckit.so
+      android-x64    -> android-x64/libwiigckit.so
+
+    With no RuntimeIdentifier, the machine doing the build decides. Set
+    WiiGcKitNativeDir to pick another <dir>, or WiiGcKitLibDir to point at any
+    folder holding a build.
+
+    The library stays a separate file even in a single-file publish.
+    Android apps get it from the NuGet package instead (runtimes/android-*).
+  -->
+
+  <PropertyGroup Condition="'$(WiiGcKitNativeDir)' == '' And '$(RuntimeIdentifier)' != ''">
+    <WiiGcKitNativeDir Condition="$(RuntimeIdentifier.StartsWith('osx'))">osx</WiiGcKitNativeDir>
+    <WiiGcKitNativeDir Condition="'$(WiiGcKitNativeDir)' == ''">$(RuntimeIdentifier)</WiiGcKitNativeDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(WiiGcKitNativeDir)' == ''">
+    <_WiiGcKitArch>x64</_WiiGcKitArch>
+    <_WiiGcKitArch Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">arm64</_WiiGcKitArch>
+    <WiiGcKitNativeDir Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx</WiiGcKitNativeDir>
+    <WiiGcKitNativeDir Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux-$(_WiiGcKitArch)</WiiGcKitNativeDir>
+    <WiiGcKitNativeDir Condition="'$(WiiGcKitNativeDir)' == ''">win-$(_WiiGcKitArch)</WiiGcKitNativeDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <WiiGcKitLibDir Condition="'$(WiiGcKitLibDir)' == ''">$(MSBuildThisFileDirectory)../../../../artifacts/native/$(WiiGcKitNativeDir)</WiiGcKitLibDir>
+    <WiiGcKitLibName Condition="$(WiiGcKitNativeDir.StartsWith('win'))">wiigckit.dll</WiiGcKitLibName>
+    <WiiGcKitLibName Condition="'$(WiiGcKitNativeDir)' == 'osx'">libwiigckit.dylib</WiiGcKitLibName>
+    <WiiGcKitLibName Condition="'$(WiiGcKitLibName)' == ''">libwiigckit.so</WiiGcKitLibName>
+    <WiiGcKitLibPath>$([System.IO.Path]::GetFullPath('$(WiiGcKitLibDir)/$(WiiGcKitLibName)'))</WiiGcKitLibPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(WiiGcKitLibPath)" Condition="Exists('$(WiiGcKitLibPath)')" Link="$(WiiGcKitLibName)"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" Visible="false" />
+  </ItemGroup>
+
+  <!-- A plain build may go without it (with a warning); a publish for a platform must include it. -->
+  <Target Name="WarnMissingWiiGcKitNative" BeforeTargets="Build" Condition="!Exists('$(WiiGcKitLibPath)')">
+    <Warning Text="No lib-wii-gamecube-kit native library at $(WiiGcKitLibPath); GameCube/Wii operations won't work. Build it with scripts/build-win.cmd, build-mac.sh, build-linux.sh or build-android.sh in lib-wii-gamecube-kit." />
+  </Target>
+  <Target Name="RequireWiiGcKitNativeForPublish" BeforeTargets="PrepareForPublish"
+          Condition="'$(RuntimeIdentifier)' != '' And !Exists('$(WiiGcKitLibPath)')">
+    <Error Text="Can't publish for $(RuntimeIdentifier): lib-wii-gamecube-kit's native library is missing ($(WiiGcKitLibPath))." />
+  </Target>
+</Project>

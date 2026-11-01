@@ -1,6 +1,6 @@
-build*/
-out/
-artifacts/
+/build*/
+/out/
+/artifacts/
 .vs/
 *.user
 .DS_Store
