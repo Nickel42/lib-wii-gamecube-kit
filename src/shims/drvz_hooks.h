@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// Hooks the patched Dolphin sources call into libdolphinrvz (see vendor/PATCHES.md).
+// Hooks the patched Dolphin sources call into lib-wii-gamecube-kit (see vendor/PATCHES.md).
 
 #pragma once
 

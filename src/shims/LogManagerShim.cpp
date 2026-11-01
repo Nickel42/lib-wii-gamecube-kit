@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // Stand-in for Dolphin's Common/Logging/LogManager.cpp. Dolphin's log manager
-// pulls in its config system and log windows; libdolphinrvz only forwards
+// pulls in its config system and log windows; lib-wii-gamecube-kit only forwards
 // warnings and errors to the calling context's log callback.
 
 #include <fmt/format.h>

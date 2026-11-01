@@ -4,7 +4,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 endif()
 
-project(libdolphinrvz VERSION 0.1.0
+project(lib-wii-gamecube-kit VERSION 0.1.0
   DESCRIPTION "Dolphin's GameCube/Wii disc image conversion (RVZ, WIA, GCZ, ISO) as a library"
   LANGUAGES C CXX)
 
@@ -26,7 +26,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
-# Static CRT, so dolphinrvz.dll needs no VC++ redistributable (as libchdman).
+# Static CRT, so wiigckit.dll needs no VC++ redistributable (as lib-chd-kit).
 if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
@@ -55,7 +55,7 @@ elseif(_drvz_arch MATCHES "^(arm64|ARM64|aarch64)$")
 else()
   message(FATAL_ERROR "Unsupported architecture '${_drvz_arch}' (x86_64 and arm64 only)")
 endif()
-message(STATUS "libdolphinrvz: Dolphin ${DRVZ_DOLPHIN_COMMIT_SHORT}, ${DRVZ_ARCH}")
+message(STATUS "lib-wii-gamecube-kit: Dolphin ${DRVZ_DOLPHIN_COMMIT_SHORT}, ${DRVZ_ARCH}")
 
 # All sources are UTF-8 (fmt requires it on MSVC).
 add_compile_options($<$<C_COMPILER_ID:MSVC>:/utf-8>)
@@ -112,6 +112,15 @@ else()
   find_package(Threads REQUIRED)
   target_link_libraries(drvz_dolphin PUBLIC Threads::Threads)
 endif()
+if(ANDROID)
+  # Build Dolphin's code as plain POSIX: its ANDROID branches route file access
+  # through the Dolphin app's JNI layer (content:// URIs), which isn't here.
+  # The NDK toolchain defines ANDROID itself, so take it away again. Bionic's
+  # <sys/endian.h> swap16/32/64 macros clash with Common/Swap.h, which only
+  # undefines them for ANDROID; drvz_android.h does that instead.
+  target_compile_options(drvz_dolphin PUBLIC -UANDROID
+    "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/src/shims/drvz_android.h")
+endif()
 if(APPLE)
   # FileUtil uses CoreFoundation for the bundle path; StringUtil uses iconv,
   # which macOS keeps in its own library (glibc has it built in).
@@ -119,39 +128,41 @@ if(APPLE)
 endif()
 
 # ------------------------------------------------------------- the library
-add_library(dolphinrvz SHARED src/drvz_capi.cpp)
-target_link_libraries(dolphinrvz PRIVATE drvz_dolphin)
-target_include_directories(dolphinrvz PUBLIC
+add_library(wiigckit SHARED src/drvz_capi.cpp)
+target_link_libraries(wiigckit PRIVATE drvz_dolphin)
+target_include_directories(wiigckit PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-target_compile_definitions(dolphinrvz PRIVATE
+target_compile_definitions(wiigckit PRIVATE
   DRVZ_BUILDING_SHARED=1
   DRVZ_VERSION="${PROJECT_VERSION}"
   DRVZ_DOLPHIN_COMMIT_SHORT="${DRVZ_DOLPHIN_COMMIT_SHORT}")
 # (DRVZ_BUILDING_SHARED wins over the DRVZ_STATIC drvz_dolphin passes on.)
 if(APPLE)
-  target_link_options(dolphinrvz PRIVATE
-    "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/src/dolphinrvz.exports")
+  target_link_options(wiigckit PRIVATE
+    "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/src/wiigckit.exports")
 elseif(UNIX)
-  # Static libstdc++: the .so then only needs the build machine's glibc.
-  target_link_options(dolphinrvz PRIVATE
-    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/dolphinrvz.map" "-Wl,--no-undefined"
+  # Static libstdc++ (libc++ on Android): the .so then only needs the build
+  # machine's glibc, or Android's libc.
+  target_link_options(wiigckit PRIVATE
+    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/wiigckit.map" "-Wl,--no-undefined"
     -static-libstdc++ -static-libgcc)
 endif()
-set_target_properties(dolphinrvz PROPERTIES
-  OUTPUT_NAME dolphinrvz
-  VERSION ${PROJECT_VERSION}
-  SOVERSION 1)
+set_target_properties(wiigckit PROPERTIES OUTPUT_NAME wiigckit)
+if(NOT ANDROID)
+  # Android loads libwiigckit.so by that exact name; no versioned soname there.
+  set_target_properties(wiigckit PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION 1)
+endif()
 
 # Same code linked statically, for tests that look inside (and for the CLI).
-add_library(dolphinrvz_static STATIC src/drvz_capi.cpp)
-target_link_libraries(dolphinrvz_static PUBLIC drvz_dolphin)
-target_compile_definitions(dolphinrvz_static PRIVATE
+add_library(wiigckit_static STATIC src/drvz_capi.cpp)
+target_link_libraries(wiigckit_static PUBLIC drvz_dolphin)
+target_compile_definitions(wiigckit_static PRIVATE
   DRVZ_VERSION="${PROJECT_VERSION}"
   DRVZ_DOLPHIN_COMMIT_SHORT="${DRVZ_DOLPHIN_COMMIT_SHORT}")
 
 if(DRVZ_BUILD_CLI)
   add_executable(drvz-cli cli/drvz_cli.cpp)
-  target_link_libraries(drvz-cli PRIVATE dolphinrvz_static)
+  target_link_libraries(drvz-cli PRIVATE wiigckit_static)
 endif()
 
 if(DRVZ_BUILD_TESTS)

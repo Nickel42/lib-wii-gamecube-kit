@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// libdolphinrvz C ABI: DolphinTool's convert command and Dolphin's disc probing
+// lib-wii-gamecube-kit C ABI: DolphinTool's convert command and Dolphin's disc probing
 // as library calls. The checks in drvz_convert follow DolphinTool's
 // ConvertCommand.cpp; differences are noted where they occur.
 
@@ -284,7 +284,7 @@ DRVZ_API const char* DRVZ_CALL drvz_status_string(drvz_status status)
 
 DRVZ_API const char* DRVZ_CALL drvz_version(void)
 {
-  return "libdolphinrvz " DRVZ_VERSION " (Dolphin " DRVZ_DOLPHIN_COMMIT_SHORT ")";
+  return "lib-wii-gamecube-kit " DRVZ_VERSION " (Dolphin " DRVZ_DOLPHIN_COMMIT_SHORT ")";
 }
 
 DRVZ_API int DRVZ_CALL drvz_abi_version(void)

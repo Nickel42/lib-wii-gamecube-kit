@@ -1,8 +1,9 @@
 #!/bin/bash
-# Builds libdolphinrvz for Linux x64, runs its tests, and copies
-# libdolphinrvz.so into native/out/linux-x64 (next to the archive engine).
+# Builds lib-wii-gamecube-kit for Linux on this machine's architecture (x64 or
+# arm64), runs its tests, and copies libwiigckit.so and drvz-cli into
+# artifacts/native/linux-<arch>.
 #
-#   native/libdolphinrvz/scripts/build-linux.sh
+#   scripts/build-linux.sh
 #
 # Needs CMake 3.22+, make or Ninja, and GCC 12+ or Clang 18+ (Dolphin's
 # minimums). Set CC/CXX to pick the compiler, e.g. CC=gcc-12 CXX=g++-12.
@@ -11,8 +12,13 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
-build="$here/build-linux-x64"
-out="$here/../out/linux-x64"
+case "$(uname -m)" in
+    x86_64) arch=x64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *) echo "Unsupported architecture $(uname -m)" >&2; exit 1 ;;
+esac
+build="$here/build-linux-$arch"
+out="$here/artifacts/native/linux-$arch"
 jobs="$(nproc)"
 
 generator=()
@@ -23,6 +29,6 @@ cmake --build "$build" --parallel "$jobs"
 ctest --test-dir "$build" --output-on-failure
 
 mkdir -p "$out"
-cp -L "$build/libdolphinrvz.so" "$out/libdolphinrvz.so"
+cp -L "$build/libwiigckit.so" "$out/libwiigckit.so"
 cp "$build/drvz-cli" "$out/drvz-cli"
-echo "Built $out/libdolphinrvz.so"
+echo "Built $out/libwiigckit.so"

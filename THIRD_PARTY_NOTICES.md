@@ -1,9 +1,9 @@
 # Third-party notices
 
-libdolphinrvz is licensed under the GNU General Public License, version 2 or
+lib-wii-gamecube-kit is licensed under the GNU General Public License, version 2 or
 (at your option) any later version (`LICENSE`), because most of it is Dolphin's
-code. It bundles the following, all built statically into `dolphinrvz.dll` /
-`libdolphinrvz.so` / `libdolphinrvz.dylib`.
+code. It bundles the following, all built statically into `wiigckit.dll` /
+`libwiigckit.so` / `libwiigckit.dylib`.
 
 | Component | Version | License | License text |
 |---|---|---|---|

@@ -1,6 +1,6 @@
 # Hand-over notes
 
-For whoever continues libdolphinrvz, person or Claude session. Read
+For whoever continues lib-wii-gamecube-kit, person or Claude session. Read
 `README.md` and `vendor/PATCHES.md` too. The overall plan, including the
 NoIntrovert integration, is in `NOINTROVERT_RVZ_PLAN.md` (kept with the
 Dolphin research checkout, `C:\Code\Claude\dolphintool`).
@@ -10,9 +10,9 @@ Dolphin research checkout, `C:\Code\Claude\dolphintool`).
 Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
 
 - `scripts\build-win.cmd x64` builds everything, runs `ctest` (4/4 pass, 264
-  checks in `drvz_tests`), and copies `dolphinrvz.dll` and `drvz-cli.exe` to
+  checks in `drvz_tests`), and copies `wiigckit.dll` and `drvz-cli.exe` to
   `native\out\win-x64`.
-- `dolphinrvz.dll` exports exactly the 18 `drvz_*` functions and depends only
+- `wiigckit.dll` exports exactly the 18 `drvz_*` functions and depends only
   on KERNEL32, USER32 and ADVAPI32 (static CRT).
 - Round trips (ISO -> format -> ISO, byte-identical, hashes equal) pass for
   GameCube and Wii synthetic discs with RVZ zstd/LZMA2/none, WIA
@@ -23,7 +23,7 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
 - Linux x64: `scripts/build-linux.sh` builds and passes ctest 4/4 with GCC 15
   (WSL Ubuntu 26.04). The .so exports only the 18 `drvz_*` functions and,
   with libstdc++ linked statically, needs nothing but libc.
-- The C# binding (`bindings/csharp/LibDolphinRvz`) and the NoIntrovert
+- The C# binding (`bindings/csharp/LibWiiGameCubeKit`) and the NoIntrovert
   integration are done; the app's self-test covers them on Windows x64.
 - **Parity with stock DolphinTool: 51 of 51 outputs byte-identical**
   (`scripts/parity.py`), on the three synthetic discs (GameCube, Wii with a

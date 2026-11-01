@@ -1,0 +1,10 @@
+build*/
+out/
+artifacts/
+.vs/
+*.user
+.DS_Store
+bindings/csharp/*/bin/
+bindings/csharp/*/obj/
+examples/csharp/bin/
+examples/csharp/obj/

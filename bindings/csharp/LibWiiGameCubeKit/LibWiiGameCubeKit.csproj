@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    .NET binding for lib-wii-gamecube-kit. Plain net8.0, so it runs on Windows,
+    macOS, Linux and Android (net8.0-android and later apps can reference it).
+
+    Two ways to use it:
+      - As a NuGet package (dotnet pack): the native libraries found in
+        artifacts/native/<rid> go in as runtimes/<rid>/native, and NuGet
+        picks the right one for each platform, Android APKs included.
+      - As a project reference (from a checkout or git submodule): the
+        consuming app ships the native library for its platform next to
+        itself, or imports build/LibWiiGameCubeKit.targets, which copies the
+        one for the platform being built.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>LibWiiGameCubeKit</RootNamespace>
+    <AssemblyName>LibWiiGameCubeKit</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <Version>0.1.0</Version>
+    <IsAotCompatible>true</IsAotCompatible>
+
+    <PackageId>LibWiiGameCubeKit</PackageId>
+    <Authors>Nickel42</Authors>
+    <Description>Dolphin's GameCube/Wii disc image conversion (RVZ, WIA, GCZ, ISO), probing and hashing as a .NET library, with native builds for Windows, macOS, Linux and Android.</Description>
+    <PackageTags>gamecube;wii;rvz;wia;gcz;dolphin;disc-image</PackageTags>
+    <PackageLicenseExpression>GPL-2.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/Nickel42/lib-wii-gamecube-kit</RepositoryUrl>
+    <!-- A package without native libraries would be useless; set to false only to try the managed side. -->
+    <RequireNativeForPack Condition="'$(RequireNativeForPack)' == ''">true</RequireNativeForPack>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <WiiGcKitNativeRoot>$(MSBuildThisFileDirectory)../../../artifacts/native</WiiGcKitNativeRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../../README.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="../../../LICENSE" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="../../../THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="../../../vendor/BUNDLED_LICENSES.txt" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="build/LibWiiGameCubeKit.targets" Pack="false" />
+  </ItemGroup>
+
+  <!-- Every native build present goes in the package, under its .NET runtime identifier. -->
+  <ItemGroup>
+    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/win-x64/wiigckit.dll" Rid="win-x64" />
+    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/win-arm64/wiigckit.dll" Rid="win-arm64" />
+    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/osx/libwiigckit.dylib" Rid="osx" />
+    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/linux-x64/libwiigckit.so" Rid="linux-x64" />
+    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/linux-arm64/libwiigckit.so" Rid="linux-arm64" />
+    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/android-arm64/libwiigckit.so" Rid="android-arm64" />
+    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/android-x64/libwiigckit.so" Rid="android-x64" />
+  </ItemGroup>
+
+  <Target Name="AddNativeToPackage" BeforeTargets="_GetPackageFiles">
+    <ItemGroup>
+      <_WiiGcKitPresentNative Include="@(WiiGcKitPackNative)" Condition="Exists('%(WiiGcKitPackNative.FullPath)')" />
+      <_WiiGcKitMissingNative Include="@(WiiGcKitPackNative)" Condition="!Exists('%(WiiGcKitPackNative.FullPath)')" />
+      <None Include="@(_WiiGcKitPresentNative)" Pack="true" PackagePath="runtimes/%(_WiiGcKitPresentNative.Rid)/native/" />
+    </ItemGroup>
+    <Error Condition="'$(RequireNativeForPack)' == 'true' And '@(_WiiGcKitMissingNative)' != ''"
+           Text="Native builds missing from the package (build them with scripts/, or pass -p:RequireNativeForPack=false): @(_WiiGcKitMissingNative->'%(FullPath)', ', ')" />
+  </Target>
+
+</Project>

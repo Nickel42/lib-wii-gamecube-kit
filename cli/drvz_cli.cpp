@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// drvz-cli: a small DolphinTool-style front end over the libdolphinrvz C API,
+// drvz-cli: a small DolphinTool-style front end over the lib-wii-gamecube-kit C API,
 // for trying the library out and for the tests.
 //
 //   drvz-cli probe <image>

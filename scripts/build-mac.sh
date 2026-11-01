@@ -1,9 +1,9 @@
 #!/bin/bash
-# Builds libdolphinrvz for macOS as one universal (arm64 + x86_64) dylib,
+# Builds lib-wii-gamecube-kit for macOS as one universal (arm64 + x86_64) dylib,
 # runs the tests of the slice this Mac can run, and copies
-# libdolphinrvz.dylib into native/out/osx (next to the archive engine).
+# libwiigckit.dylib into artifacts/native/osx.
 #
-#   native/libdolphinrvz/scripts/build-mac.sh
+#   scripts/build-mac.sh
 #
 # Dolphin picks CPU-specific code per architecture at compile time, so each
 # architecture is its own CMake build; lipo merges them. Needs CMake 3.22+
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
-out="$here/../out/osx"
+out="$here/artifacts/native/osx"
 jobs="$(sysctl -n hw.ncpu)"
 native_arch="$(uname -m)"
 
@@ -26,7 +26,7 @@ for arch in arm64 x86_64; do
 done
 
 mkdir -p "$out"
-lipo -create "$here/build-osx-arm64/libdolphinrvz.dylib" "$here/build-osx-x86_64/libdolphinrvz.dylib" \
-    -output "$out/libdolphinrvz.dylib"
-lipo -info "$out/libdolphinrvz.dylib"
-echo "Built $out/libdolphinrvz.dylib"
+lipo -create "$here/build-osx-arm64/libwiigckit.dylib" "$here/build-osx-x86_64/libwiigckit.dylib" \
+    -output "$out/libwiigckit.dylib"
+lipo -info "$out/libwiigckit.dylib"
+echo "Built $out/libwiigckit.dylib"

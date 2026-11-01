@@ -1,10 +1,10 @@
 /*
- * dolphinrvz.h - C ABI for libdolphinrvz (Dolphin's GameCube/Wii disc image
+ * dolphinrvz.h - C ABI for lib-wii-gamecube-kit (Dolphin's GameCube/Wii disc image
  * conversion as a library: ISO/GCZ/CISO/WBFS/WIA/RVZ <-> RVZ/WIA/GCZ/ISO)
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Conventions (the same as libchdman's chdman.h)
+ * Conventions (the same as lib-chd-kit's chdman.h)
  * -----------
  *  - All strings are UTF-8 and NUL-terminated. Paths are UTF-8 on every
  *    platform (including Windows).
@@ -76,7 +76,7 @@ typedef enum drvz_status {
 /* Static English description of a status code. Never NULL. */
 DRVZ_API const char *DRVZ_CALL drvz_status_string(drvz_status status);
 
-/* Library version, e.g. "libdolphinrvz 0.1.0 (Dolphin 1822e385)". */
+/* Library version, e.g. "lib-wii-gamecube-kit 0.1.0 (Dolphin 1822e385)". */
 DRVZ_API const char *DRVZ_CALL drvz_version(void);
 DRVZ_API int DRVZ_CALL drvz_abi_version(void);
 

@@ -133,7 +133,7 @@ std::vector<u8> MakeGameCubeDisc(u64 size)
       {"stream.adp", 0x400000, 0x123457, 3},
   };
   const u64 fst_offset = 0x20000;
-  WriteVolumeHeader(d, "GTSE01", "libdolphinrvz GameCube test disc", false, fst_offset, files);
+  WriteVolumeHeader(d, "GTSE01", "lib-wii-gamecube-kit GameCube test disc", false, fst_offset, files);
   Put32(d, 0x458, 1);  // bi2.bin region: NTSC-U
   const u64 fst_end = fst_offset + (files.size() + 1) * 12 + 64;
   FillGaps(d, 0x8100, fst_offset, fst_end, files, 0x1234);
@@ -155,7 +155,7 @@ std::vector<u8> MakeWiiDisc(u32 groups, bool bad_hash)
   // Outer disc header: Wii magic, hashes and encryption on (0x60/0x61 = 0).
   std::memcpy(&d[0], "RTSP01", 6);
   Put32(d, 0x18, DiscIO::WII_DISC_MAGIC);
-  std::strncpy(reinterpret_cast<char*>(&d[0x20]), "libdolphinrvz Wii test disc", 0x3E0 - 1);
+  std::strncpy(reinterpret_cast<char*>(&d[0x20]), "lib-wii-gamecube-kit Wii test disc", 0x3E0 - 1);
   Put32(d, 0x40000, 1);                 // one partition in group 0
   Put32(d, 0x40004, 0x40020 >> 2);      // its table
   Put32(d, 0x40020, PARTITION >> 2);    // partition offset
@@ -204,7 +204,7 @@ std::vector<u8> MakeWiiDisc(u32 groups, bool bad_hash)
       {"sound.brsar", decrypted_size - 0x300000, 0x111111, 6},
   };
   const u64 fst_offset = 0x10000;
-  WriteVolumeHeader(inner, "RTSP01", "libdolphinrvz Wii test disc", true, fst_offset, files);
+  WriteVolumeHeader(inner, "RTSP01", "lib-wii-gamecube-kit Wii test disc", true, fst_offset, files);
   const u64 fst_end = fst_offset + (files.size() + 1) * 12 + 64;
   FillGaps(inner, 0x8100, fst_offset, fst_end, files, 0x5678);
 

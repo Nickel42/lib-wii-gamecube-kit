@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// libdolphinrvz tests, run by ctest. Everything goes through the public C API;
+// lib-wii-gamecube-kit tests, run by ctest. Everything goes through the public C API;
 // Dolphin's internals are only used to build the synthetic input discs.
 //
 //   drvz_tests <work dir>
@@ -133,7 +133,7 @@ bool NoTempFiles()
 void TestBasics()
 {
   CHECK(drvz_abi_version() == DRVZ_ABI_VERSION);
-  CHECK(std::strstr(drvz_version(), "libdolphinrvz") != nullptr);
+  CHECK(std::strstr(drvz_version(), "lib-wii-gamecube-kit") != nullptr);
   CHECK(std::strcmp(drvz_status_string(DRVZ_OK), "Success") == 0);
   CHECK(std::strcmp(drvz_status_string(static_cast<drvz_status>(1234)), "Unknown status") == 0);
 
@@ -174,7 +174,7 @@ void TestProbe(const std::string& gc_iso, const std::string& wii_iso)
   CHECK(info.platform == DRVZ_PLATFORM_GAMECUBE);
   CHECK(std::strcmp(info.game_id, "GTSE01") == 0);
   CHECK(std::strcmp(info.maker_id, "01") == 0);
-  CHECK(std::strcmp(info.internal_name, "libdolphinrvz GameCube test disc") == 0);
+  CHECK(std::strcmp(info.internal_name, "lib-wii-gamecube-kit GameCube test disc") == 0);
   CHECK(info.region == DRVZ_REGION_NTSC_U);
   CHECK(info.data_size == fs::file_size(U8(gc_iso)) && info.data_size_is_exact);
   CHECK(!info.is_nkit && !info.is_datel && info.is_scrubbable);

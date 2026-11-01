@@ -1,4 +1,4 @@
-// Raw P/Invoke layer for libdolphinrvz (dolphinrvz.h). Struct layouts mirror
+// Raw P/Invoke layer for lib-wii-gamecube-kit (dolphinrvz.h). Struct layouts mirror
 // the C header exactly; the public API lives in DolphinRvz.cs.
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -6,7 +6,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace LibDolphinRvz.Interop
+namespace LibWiiGameCubeKit.Interop
 {
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate int ProgressCallback(IntPtr user, DrvzPhase phase, double fraction, double ratio);
@@ -77,8 +77,8 @@ namespace LibDolphinRvz.Interop
 
     internal static class Native
     {
-        // dolphinrvz.dll, libdolphinrvz.dylib or libdolphinrvz.so.
-        const string Lib = "dolphinrvz";
+        // wiigckit.dll, libwiigckit.dylib or libwiigckit.so.
+        const string Lib = "wiigckit";
 
         /// <summary>sizeof() of the C structs on 64-bit platforms (checked by the tests on both sides).</summary>
         public const int DiscInfoSize = 376, ConvertOptionsSize = 48, HashResultSize = 112;

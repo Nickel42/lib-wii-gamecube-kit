@@ -1,4 +1,4 @@
-// Managed API for libdolphinrvz: Dolphin's GameCube/Wii disc image
+// Managed API for lib-wii-gamecube-kit: Dolphin's GameCube/Wii disc image
 // conversion (RVZ, WIA, GCZ, ISO) as a .NET library.
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -6,9 +6,9 @@ using System;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Threading;
-using LibDolphinRvz.Interop;
+using LibWiiGameCubeKit.Interop;
 
-namespace LibDolphinRvz
+namespace LibWiiGameCubeKit
 {
     public enum DrvzStatus : int
     {
@@ -31,7 +31,7 @@ namespace LibDolphinRvz
 
     public enum RvzCompression : int { None = 0, Purge = 1, Bzip2 = 2, Lzma = 3, Lzma2 = 4, Zstd = 5 }
 
-    /// <summary>A libdolphinrvz call failed. <see cref="Status"/> is the C status code.</summary>
+    /// <summary>A lib-wii-gamecube-kit call failed. <see cref="Status"/> is the C status code.</summary>
     public sealed class DolphinRvzException : Exception
     {
         public DrvzStatus Status { get; }
@@ -83,7 +83,7 @@ namespace LibDolphinRvz
     }
 
     /// <summary>
-    /// One libdolphinrvz context. Operations block; run them on a worker
+    /// One lib-wii-gamecube-kit context. Operations block; run them on a worker
     /// thread. An instance runs one operation at a time; use separate
     /// instances for parallel work. Every operation accepts a
     /// CancellationToken; a cancelled conversion deletes its partial output

@@ -1,7 +1,7 @@
 // Copyright 2017 Dolphin Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// libdolphinrvz stand-in for Dolphin's Core/IOS/Device.h. The ticket, TMD and
+// lib-wii-gamecube-kit stand-in for Dolphin's Core/IOS/Device.h. The ticket, TMD and
 // IOSC code only needs the IOS return codes, not the emulated IOS devices, so
 // this header keeps just that enum (copied from Device.h unchanged).
 

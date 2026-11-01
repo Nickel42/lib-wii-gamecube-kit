@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copies the parts of Dolphin that libdolphinrvz builds from into vendor/.
+# Copies the parts of Dolphin that lib-wii-gamecube-kit builds from into vendor/.
 #
 #   scripts/vendor-dolphin.sh <dolphin checkout>
 #
@@ -124,7 +124,7 @@ cp "$ext/licenses.md" "$dst/externals/dolphin-externals-licenses.md"
 
 # Every bundled license in one file, shipped with release downloads.
 {
-  echo "Licenses of the code bundled in libdolphinrvz (see THIRD_PARTY_NOTICES.md)."
+  echo "Licenses of the code bundled in lib-wii-gamecube-kit (see THIRD_PARTY_NOTICES.md)."
   for entry in \
       "Dolphin (COPYING):dolphin/COPYING" \
       "Dolphin (GPL-2.0-or-later):dolphin/LICENSES/GPL-2.0-or-later.txt" \

@@ -1,0 +1,156 @@
+# Builds lib-wii-gamecube-kit for Windows (x64, ARM64), macOS (universal),
+# Linux (x64, arm64) and Android (arm64-v8a, x86_64), runs the tests where
+# the runner can, and packs the LibWiiGameCubeKit NuGet package with every
+# native library in it. A v* tag also makes a GitHub release with the package
+# and the native libraries. Run it by hand (Actions -> Build -> Run workflow)
+# to get the same files as workflow artifacts without a release.
+#
+# It doesn't run on every push, on purpose: a full build takes a while.
+
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (x64 with its tests, and ARM64)
+        shell: cmd
+        # The ARM64 build is cross-compiled, so its tests only run on x64.
+        run: |
+          call scripts\build-win.cmd x64 || exit /b 1
+          call scripts\build-win.cmd arm64 || exit /b 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-windows
+          path: artifacts/native/
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the newest Xcode
+        # Dolphin's code needs AppleClang 21 or newer.
+        run: |
+          xcode="$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+          clang --version
+      - name: Build (universal) and run the tests
+        run: bash scripts/build-mac.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-macos
+          path: artifacts/native/
+          if-no-files-found: error
+
+  linux:
+    strategy:
+      matrix:
+        # The oldest supported Ubuntu LTS images: the library needs this glibc
+        # (2.35) or newer, so building on them keeps it portable.
+        runner: [ubuntu-22.04, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the tests
+        # Dolphin's code needs GCC 12+; Ubuntu 22.04's default is 11. libstdc++ is
+        # linked statically, so the .so still only needs glibc 2.35.
+        env:
+          CC: gcc-12
+          CXX: g++-12
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-12 g++-12 ninja-build
+          bash scripts/build-linux.sh
+      - name: Check exports and dependencies
+        run: |
+          lib="$(ls artifacts/native/linux-*/libwiigckit.so)"
+          extra="$(nm -D --defined-only "$lib" | awk '{print $3}' | grep -v '^drvz_' || true)"
+          if [ -n "$extra" ]; then echo "$lib exports more than drvz_*:"; echo "$extra" | head -20; exit 1; fi
+          echo "$lib: $(nm -D --defined-only "$lib" | wc -l) exports, all drvz_*"
+          if ldd "$lib" | grep 'not found'; then exit 1; fi
+          echo "needs glibc $(objdump -T "$lib" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.runner }}
+          path: artifacts/native/
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r28c
+          add-to-path: false
+      - name: Build (arm64-v8a and x86_64)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          bash scripts/build-android.sh
+      - name: Check exports
+        env:
+          NDK: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          nm="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          for lib in artifacts/native/android-*/libwiigckit.so; do
+            extra="$("$nm" -D --defined-only "$lib" | awk '{print $3}' | grep -v '^drvz_' || true)"
+            if [ -n "$extra" ]; then echo "$lib exports more than drvz_*:"; echo "$extra" | head -20; exit 1; fi
+            echo "$lib: $("$nm" -D --defined-only "$lib" | wc -l) exports, all drvz_*"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-android
+          path: artifacts/native/
+          if-no-files-found: error
+
+  package:
+    needs: [windows, macos, linux, android]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: artifacts/native
+          merge-multiple: true
+      - name: Pack
+        run: |
+          version=0.0.0-ci.${GITHUB_RUN_NUMBER}
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; fi
+          find artifacts/native -type f | sort
+          dotnet pack bindings/csharp/LibWiiGameCubeKit/LibWiiGameCubeKit.csproj -c Release \
+            -p:Version="$version" -o dist
+          unzip -l dist/*.nupkg | grep runtimes/
+          (cd artifacts/native && zip -r "../../dist/lib-wii-gamecube-kit-$version-native.zip" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: dist/
+          if-no-files-found: error
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "lib-wii-gamecube-kit ${GITHUB_REF_NAME#v}" --generate-notes

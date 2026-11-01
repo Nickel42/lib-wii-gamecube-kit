@@ -1,4 +1,4 @@
-"""Byte-for-byte parity: stock DolphinTool vs libdolphinrvz's drvz-cli.
+"""Byte-for-byte parity: stock DolphinTool vs lib-wii-gamecube-kit's drvz-cli.
 
     python scripts/parity.py <DolphinTool> <drvz-cli> <work dir> <input image>...
 
