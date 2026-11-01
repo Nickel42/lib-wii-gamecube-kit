@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// drvz-cli: a small DolphinTool-style front end over the lib-wii-gamecube-kit C API,
+// lib-wii-gamecube-kit-cli: a small DolphinTool-style front end over the lib-wii-gamecube-kit C API,
 // for trying the library out and for the tests.
 //
-//   drvz-cli probe <image>
-//   drvz-cli hash <image>
-//   drvz-cli convert -i <in> -o <out> [-f rvz|wia|gcz|iso] [-c none|purge|bzip2|lzma|lzma2|zstd]
+//   lib-wii-gamecube-kit-cli probe <image>
+//   lib-wii-gamecube-kit-cli hash <image>
+//   lib-wii-gamecube-kit-cli convert -i <in> -o <out> [-f rvz|wia|gcz|iso] [-c none|purge|bzip2|lzma|lzma2|zstd]
 //                    [-l level] [-b block_size] [-s] [-y] [-t threads] [-q]
 
 #include <cstdio>
@@ -13,7 +13,7 @@
 #include <cstring>
 #include <string>
 
-#include "dolphinrvz.h"
+#include "lib-wii-gamecube-kit.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -24,13 +24,13 @@ namespace
 bool g_quiet = false;
 int g_last_percent = -1;
 
-void DRVZ_CALL OnLog(void*, drvz_log_level level, const char* message)
+void WII_GAMECUBE_KIT_CALL OnLog(void*, wii_gamecube_kit_log_level level, const char* message)
 {
-  const char* prefix = level == DRVZ_LOG_ERROR ? "error" : level == DRVZ_LOG_WARNING ? "warning" : "info";
+  const char* prefix = level == WII_GAMECUBE_KIT_LOG_ERROR ? "error" : level == WII_GAMECUBE_KIT_LOG_WARNING ? "warning" : "info";
   std::fprintf(stderr, "%s: %s\n", prefix, message);
 }
 
-int DRVZ_CALL OnProgress(void*, drvz_phase phase, double fraction, double ratio)
+int WII_GAMECUBE_KIT_CALL OnProgress(void*, wii_gamecube_kit_phase phase, double fraction, double ratio)
 {
   if (g_quiet)
     return 0;
@@ -39,10 +39,10 @@ int DRVZ_CALL OnProgress(void*, drvz_phase phase, double fraction, double ratio)
   {
     g_last_percent = percent;
     if (ratio > 0)
-      std::fprintf(stderr, "\r%s %3d%%  ratio %3d%%", phase == DRVZ_PHASE_HASHING ? "hashing" : "converting",
+      std::fprintf(stderr, "\r%s %3d%%  ratio %3d%%", phase == WII_GAMECUBE_KIT_PHASE_HASHING ? "hashing" : "converting",
                    percent, static_cast<int>(ratio * 100));
     else
-      std::fprintf(stderr, "\r%s %3d%%", phase == DRVZ_PHASE_HASHING ? "hashing" : "converting", percent);
+      std::fprintf(stderr, "\r%s %3d%%", phase == WII_GAMECUBE_KIT_PHASE_HASHING ? "hashing" : "converting", percent);
     if (percent >= 100)
       std::fprintf(stderr, "\n");
   }
@@ -53,58 +53,58 @@ int Usage()
 {
   std::fprintf(stderr,
                "%s\n"
-               "usage: drvz-cli probe <image>\n"
-               "       drvz-cli hash <image>\n"
-               "       drvz-cli convert -i <in> -o <out> [-f rvz|wia|gcz|iso]\n"
+               "usage: lib-wii-gamecube-kit-cli probe <image>\n"
+               "       lib-wii-gamecube-kit-cli hash <image>\n"
+               "       lib-wii-gamecube-kit-cli convert -i <in> -o <out> [-f rvz|wia|gcz|iso]\n"
                "                [-c none|purge|bzip2|lzma|lzma2|zstd] [-l level] [-b block_size]\n"
                "                [-s scrub] [-y overwrite] [-t threads] [-q quiet]\n",
-               drvz_version());
+               wii_gamecube_kit_version());
   return 2;
 }
 
-const char* PlatformName(drvz_platform p)
+const char* PlatformName(wii_gamecube_kit_platform p)
 {
   switch (p)
   {
-  case DRVZ_PLATFORM_GAMECUBE:
+  case WII_GAMECUBE_KIT_PLATFORM_GAMECUBE:
     return "GameCube";
-  case DRVZ_PLATFORM_WII:
+  case WII_GAMECUBE_KIT_PLATFORM_WII:
     return "Wii";
-  case DRVZ_PLATFORM_TRIFORCE:
+  case WII_GAMECUBE_KIT_PLATFORM_TRIFORCE:
     return "Triforce";
   }
   return "?";
 }
 
-const char* ContainerName(drvz_container c)
+const char* ContainerName(wii_gamecube_kit_container c)
 {
   switch (c)
   {
-  case DRVZ_CONTAINER_PLAIN:
+  case WII_GAMECUBE_KIT_CONTAINER_PLAIN:
     return "ISO";
-  case DRVZ_CONTAINER_GCZ:
+  case WII_GAMECUBE_KIT_CONTAINER_GCZ:
     return "GCZ";
-  case DRVZ_CONTAINER_CISO:
+  case WII_GAMECUBE_KIT_CONTAINER_CISO:
     return "CISO";
-  case DRVZ_CONTAINER_WBFS:
+  case WII_GAMECUBE_KIT_CONTAINER_WBFS:
     return "WBFS";
-  case DRVZ_CONTAINER_TGC:
+  case WII_GAMECUBE_KIT_CONTAINER_TGC:
     return "TGC";
-  case DRVZ_CONTAINER_WIA:
+  case WII_GAMECUBE_KIT_CONTAINER_WIA:
     return "WIA";
-  case DRVZ_CONTAINER_RVZ:
+  case WII_GAMECUBE_KIT_CONTAINER_RVZ:
     return "RVZ";
-  case DRVZ_CONTAINER_NFS:
+  case WII_GAMECUBE_KIT_CONTAINER_NFS:
     return "NFS";
   default:
     return "other";
   }
 }
 
-int Fail(drvz_context* ctx, drvz_status status)
+int Fail(wii_gamecube_kit_context* ctx, wii_gamecube_kit_status status)
 {
-  std::fprintf(stderr, "error: %s (%s)\n", drvz_last_error(ctx), drvz_status_string(status));
-  drvz_context_destroy(ctx);
+  std::fprintf(stderr, "error: %s (%s)\n", wii_gamecube_kit_last_error(ctx), wii_gamecube_kit_status_string(status));
+  wii_gamecube_kit_context_destroy(ctx);
   return 1;
 }
 
@@ -114,18 +114,18 @@ int Run(int argc, char** argv)
     return Usage();
   const std::string command = argv[1];
 
-  drvz_context* ctx = nullptr;
-  if (drvz_context_create(&ctx) != DRVZ_OK)
+  wii_gamecube_kit_context* ctx = nullptr;
+  if (wii_gamecube_kit_context_create(&ctx) != WII_GAMECUBE_KIT_OK)
     return 1;
-  drvz_context_set_log(ctx, OnLog, nullptr);
-  drvz_context_set_progress(ctx, OnProgress, nullptr);
+  wii_gamecube_kit_context_set_log(ctx, OnLog, nullptr);
+  wii_gamecube_kit_context_set_progress(ctx, OnProgress, nullptr);
 
   if (command == "probe")
   {
-    drvz_disc_info info;
-    drvz_disc_info_init(&info);
-    const drvz_status status = drvz_probe(ctx, argv[2], &info);
-    if (status != DRVZ_OK)
+    wii_gamecube_kit_disc_info info;
+    wii_gamecube_kit_disc_info_init(&info);
+    const wii_gamecube_kit_status status = wii_gamecube_kit_probe(ctx, argv[2], &info);
+    if (status != WII_GAMECUBE_KIT_OK)
       return Fail(ctx, status);
     std::printf("container:   %s\n", ContainerName(info.container));
     std::printf("platform:    %s\n", PlatformName(info.platform));
@@ -147,10 +147,10 @@ int Run(int argc, char** argv)
   }
   else if (command == "hash")
   {
-    drvz_hash_result result;
-    drvz_hash_result_init(&result);
-    const drvz_status status = drvz_hash(ctx, argv[2], &result);
-    if (status != DRVZ_OK)
+    wii_gamecube_kit_hash_result result;
+    wii_gamecube_kit_hash_result_init(&result);
+    const wii_gamecube_kit_status status = wii_gamecube_kit_hash(ctx, argv[2], &result);
+    if (status != WII_GAMECUBE_KIT_OK)
       return Fail(ctx, status);
     std::printf("crc32 %s\nmd5   %s\nsha1  %s\nsize  %llu%s\n", result.crc32, result.md5,
                 result.sha1, static_cast<unsigned long long>(result.size),
@@ -158,8 +158,8 @@ int Run(int argc, char** argv)
   }
   else if (command == "convert")
   {
-    drvz_convert_options opts;
-    drvz_convert_options_init(&opts);
+    wii_gamecube_kit_convert_options opts;
+    wii_gamecube_kit_convert_options_init(&opts);
     for (int i = 2; i < argc; ++i)
     {
       const std::string arg = argv[i];
@@ -179,40 +179,40 @@ int Run(int argc, char** argv)
       {
         const std::string f = value();
         if (f == "rvz")
-          opts.format = DRVZ_FORMAT_RVZ;
+          opts.format = WII_GAMECUBE_KIT_FORMAT_RVZ;
         else if (f == "wia")
-          opts.format = DRVZ_FORMAT_WIA;
+          opts.format = WII_GAMECUBE_KIT_FORMAT_WIA;
         else if (f == "gcz")
-          opts.format = DRVZ_FORMAT_GCZ;
+          opts.format = WII_GAMECUBE_KIT_FORMAT_GCZ;
         else if (f == "iso")
-          opts.format = DRVZ_FORMAT_ISO;
+          opts.format = WII_GAMECUBE_KIT_FORMAT_ISO;
         else
           return Usage();
-        if (opts.format == DRVZ_FORMAT_ISO)
+        if (opts.format == WII_GAMECUBE_KIT_FORMAT_ISO)
           opts.block_size = 0;
-        if (opts.format == DRVZ_FORMAT_WIA && opts.compression == DRVZ_COMPRESSION_ZSTD)
+        if (opts.format == WII_GAMECUBE_KIT_FORMAT_WIA && opts.compression == WII_GAMECUBE_KIT_COMPRESSION_ZSTD)
         {
-          opts.compression = DRVZ_COMPRESSION_LZMA2;
+          opts.compression = WII_GAMECUBE_KIT_COMPRESSION_LZMA2;
           opts.block_size = 0x200000;
         }
-        if (opts.format == DRVZ_FORMAT_GCZ)
+        if (opts.format == WII_GAMECUBE_KIT_FORMAT_GCZ)
           opts.block_size = 0x8000;
       }
       else if (arg == "-c")
       {
         const std::string c = value();
         if (c == "none")
-          opts.compression = DRVZ_COMPRESSION_NONE;
+          opts.compression = WII_GAMECUBE_KIT_COMPRESSION_NONE;
         else if (c == "purge")
-          opts.compression = DRVZ_COMPRESSION_PURGE;
+          opts.compression = WII_GAMECUBE_KIT_COMPRESSION_PURGE;
         else if (c == "bzip2")
-          opts.compression = DRVZ_COMPRESSION_BZIP2;
+          opts.compression = WII_GAMECUBE_KIT_COMPRESSION_BZIP2;
         else if (c == "lzma")
-          opts.compression = DRVZ_COMPRESSION_LZMA;
+          opts.compression = WII_GAMECUBE_KIT_COMPRESSION_LZMA;
         else if (c == "lzma2")
-          opts.compression = DRVZ_COMPRESSION_LZMA2;
+          opts.compression = WII_GAMECUBE_KIT_COMPRESSION_LZMA2;
         else if (c == "zstd")
-          opts.compression = DRVZ_COMPRESSION_ZSTD;
+          opts.compression = WII_GAMECUBE_KIT_COMPRESSION_ZSTD;
         else
           return Usage();
       }
@@ -225,22 +225,22 @@ int Run(int argc, char** argv)
       else if (arg == "-y")
         opts.overwrite = 1;
       else if (arg == "-t")
-        drvz_context_set_num_threads(ctx, std::atoi(value()));
+        wii_gamecube_kit_context_set_num_threads(ctx, std::atoi(value()));
       else if (arg == "-q")
         g_quiet = true;
       else
         return Usage();
     }
-    const drvz_status status = drvz_convert(ctx, &opts);
-    if (status != DRVZ_OK)
+    const wii_gamecube_kit_status status = wii_gamecube_kit_convert(ctx, &opts);
+    if (status != WII_GAMECUBE_KIT_OK)
       return Fail(ctx, status);
   }
   else
   {
-    drvz_context_destroy(ctx);
+    wii_gamecube_kit_context_destroy(ctx);
     return Usage();
   }
-  drvz_context_destroy(ctx);
+  wii_gamecube_kit_context_destroy(ctx);
   return 0;
 }
 }  // namespace

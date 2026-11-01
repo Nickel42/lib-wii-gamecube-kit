@@ -1,4 +1,4 @@
-Licenses of the code bundled in libdolphinrvz (see THIRD_PARTY_NOTICES.md).
+Licenses of the code bundled in lib-wii-gamecube-kit (see THIRD_PARTY_NOTICES.md).
 
 
 ==================== Dolphin (COPYING) ====================

@@ -1,7 +1,0 @@
-/* Only the drvz_* C API is exported. */
-{
-  global:
-    drvz_*;
-  local:
-    *;
-};

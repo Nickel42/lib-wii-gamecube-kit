@@ -77,10 +77,10 @@ jobs:
           bash scripts/build-linux.sh
       - name: Check exports and dependencies
         run: |
-          lib="$(ls artifacts/native/linux-*/libwiigckit.so)"
-          extra="$(nm -D --defined-only "$lib" | awk '{print $3}' | grep -v '^drvz_' || true)"
-          if [ -n "$extra" ]; then echo "$lib exports more than drvz_*:"; echo "$extra" | head -20; exit 1; fi
-          echo "$lib: $(nm -D --defined-only "$lib" | wc -l) exports, all drvz_*"
+          lib="$(ls artifacts/native/linux-*/lib-wii-gamecube-kit.so)"
+          extra="$(nm -D --defined-only "$lib" | awk '{print $3}' | grep -v '^wii_gamecube_kit_' || true)"
+          if [ -n "$extra" ]; then echo "$lib exports more than wii_gamecube_kit_*:"; echo "$extra" | head -20; exit 1; fi
+          echo "$lib: $(nm -D --defined-only "$lib" | wc -l) exports, all wii_gamecube_kit_*"
           if ldd "$lib" | grep 'not found'; then exit 1; fi
           echo "needs glibc $(objdump -T "$lib" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
       - uses: actions/upload-artifact@v4
@@ -109,10 +109,10 @@ jobs:
           NDK: ${{ steps.ndk.outputs.ndk-path }}
         run: |
           nm="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
-          for lib in artifacts/native/android-*/libwiigckit.so; do
-            extra="$("$nm" -D --defined-only "$lib" | awk '{print $3}' | grep -v '^drvz_' || true)"
-            if [ -n "$extra" ]; then echo "$lib exports more than drvz_*:"; echo "$extra" | head -20; exit 1; fi
-            echo "$lib: $("$nm" -D --defined-only "$lib" | wc -l) exports, all drvz_*"
+          for lib in artifacts/native/android-*/lib-wii-gamecube-kit.so; do
+            extra="$("$nm" -D --defined-only "$lib" | awk '{print $3}' | grep -v '^wii_gamecube_kit_' || true)"
+            if [ -n "$extra" ]; then echo "$lib exports more than wii_gamecube_kit_*:"; echo "$extra" | head -20; exit 1; fi
+            echo "$lib: $("$nm" -D --defined-only "$lib" | wc -l) exports, all wii_gamecube_kit_*"
           done
       - uses: actions/upload-artifact@v4
         with:

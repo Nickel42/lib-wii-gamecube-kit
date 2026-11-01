@@ -7,7 +7,7 @@
 #include <fmt/format.h>
 
 #include "Common/Logging/Log.h"
-#include "drvz_internal.h"
+#include "lib-wii-gamecube-kit-internal.h"
 
 namespace Common::Log
 {
@@ -17,22 +17,22 @@ void GenericLogFmtImpl(LogLevel level, LogType type, const char* file, int line,
   (void)type;
   (void)file;
   (void)line;
-  drvz_log_level out;
+  wii_gamecube_kit_log_level out;
   switch (level)
   {
   case LogLevel::LERROR:
-    out = DRVZ_LOG_ERROR;
+    out = WII_GAMECUBE_KIT_LOG_ERROR;
     break;
   case LogLevel::LWARNING:
-    out = DRVZ_LOG_WARNING;
+    out = WII_GAMECUBE_KIT_LOG_WARNING;
     break;
   case LogLevel::LNOTICE:
   case LogLevel::LINFO:
-    out = DRVZ_LOG_INFO;
+    out = WII_GAMECUBE_KIT_LOG_INFO;
     break;
   default:
     return;
   }
-  drvz::Log(out, fmt::vformat(format, args));
+  wii_gamecube_kit::Log(out, fmt::vformat(format, args));
 }
 }  // namespace Common::Log

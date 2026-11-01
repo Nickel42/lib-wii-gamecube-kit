@@ -5,31 +5,31 @@ by `scripts/vendor-dolphin.sh`, normalised to LF, and then patched with
 `patches/*.patch`. Never edit `vendor/dolphin/` by hand: change the patch, and
 re-run the script to check it applies.
 
-Every change is behind `#ifdef DRVZ_BUILD` / `#ifndef DRVZ_BUILD`, so the
+Every change is behind `#ifdef WII_GAMECUBE_KIT_BUILD` / `#ifndef WII_GAMECUBE_KIT_BUILD`, so the
 patched files still build inside Dolphin.
 
-`patches/0001-libdolphinrvz-build.patch`:
+`patches/0001-lib-wii-gamecube-kit-build.patch`:
 
 | File | Change | Why |
 |---|---|---|
 | `DiscIO/Blob.cpp` | No `DirectoryBlobReader` fallback | Extracted-folder input pulls in much more of Dolphin, and NoIntrovert only reads image files |
 | `DiscIO/Volume.cpp` | No `CreateDiscForCore`, WAD volumes or `CachedBlob` | They need Dolphin's config system and memory arenas; the library only opens discs |
-| `DiscIO/MultithreadedCompressor.h` | Thread count from `drvz::CompressorThreadCount()` | Lets each context set its thread count (`drvz_context_set_num_threads`), instead of always using every core |
+| `DiscIO/MultithreadedCompressor.h` | Thread count from `wii_gamecube_kit::CompressorThreadCount()` | Lets each context set its thread count (`wii_gamecube_kit_context_set_num_threads`), instead of always using every core |
 | `Core/IOS/ES/Formats.h/.cpp` | No `SharedContentMap` / `UIDSys` | They work on the emulated NAND; only ticket/TMD parsing is needed |
 | `Core/IOS/IOSC.cpp` | Don't call `LoadEntries()` | Never read a `keys.bin` from a user directory; the built-in Wii common keys are enough for discs |
 
 ## Stand-ins (`src/shims/`)
 
-These are libdolphinrvz files that take the place of Dolphin headers and
+These are lib-wii-gamecube-kit files that take the place of Dolphin headers and
 sources that are not vendored. The include path puts `src/shims` first.
 
 | File | Replaces | Contents |
 |---|---|---|
 | `Core/IOS/Device.h` | Dolphin's emulated IOS device header | Only the `IOS::HLE::ReturnCode` enum, copied unchanged |
 | `LogManagerShim.cpp` | `Common/Logging/LogManager.cpp` | `GenericLogFmtImpl` forwarding warnings and errors to the context's log callback |
-| `drvz_hooks.h` | (new) | The hook the `MultithreadedCompressor.h` patch calls |
+| `lib-wii-gamecube-kit-hooks.h` | (new) | The hook the `MultithreadedCompressor.h` patch calls |
 
-Dolphin's `Common/MsgHandler.cpp` is used unchanged: `drvz_context_create`
+Dolphin's `Common/MsgHandler.cpp` is used unchanged: `wii_gamecube_kit_context_create`
 registers an alert handler, so `PanicAlert` messages become the context's
 error text instead of message boxes.
 

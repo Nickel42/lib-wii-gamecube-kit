@@ -1,5 +1,5 @@
 @echo off
-rem Builds lib-wii-gamecube-kit (wiigckit.dll + drvz-cli) for one Windows architecture
+rem Builds lib-wii-gamecube-kit (lib-wii-gamecube-kit.dll + lib-wii-gamecube-kit-cli) for one Windows architecture
 rem and runs the tests.   scripts\build-win.cmd [x64|arm64]
 setlocal
 set ARCH=%1
@@ -18,6 +18,6 @@ cmake --build "%BUILD%" || exit /b 1
 if "%ARCH%"=="x64" (ctest --test-dir "%BUILD%" --output-on-failure || exit /b 1)
 
 if not exist "%OUT%" mkdir "%OUT%"
-copy /y "%BUILD%\wiigckit.dll" "%OUT%\" >nul || exit /b 1
-copy /y "%BUILD%\drvz-cli.exe" "%OUT%\" >nul || exit /b 1
-echo Built %OUT%\wiigckit.dll
+copy /y "%BUILD%\lib-wii-gamecube-kit.dll" "%OUT%\" >nul || exit /b 1
+copy /y "%BUILD%\lib-wii-gamecube-kit-cli.exe" "%OUT%\" >nul || exit /b 1
+echo Built %OUT%\lib-wii-gamecube-kit.dll

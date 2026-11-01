@@ -18,20 +18,20 @@
 #include "Common/Crypto/SHA1.h"
 #include "Common/StringUtil.h"
 
-#ifndef DRVZ_BUILD  // libdolphinrvz: no emulator config
+#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no emulator config
 #include "Core/Config/MainSettings.h"
 #endif
 #include "Core/IOS/ES/Formats.h"
 
 #include "DiscIO/Blob.h"
-#ifndef DRVZ_BUILD  // libdolphinrvz: no CachedBlob or WADs
+#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no CachedBlob or WADs
 #include "DiscIO/CachedBlob.h"
 #endif
 #include "DiscIO/DiscUtils.h"
 #include "DiscIO/Enums.h"
 #include "DiscIO/VolumeDisc.h"
 #include "DiscIO/VolumeGC.h"
-#ifndef DRVZ_BUILD
+#ifndef WII_GAMECUBE_KIT_BUILD
 #include "DiscIO/VolumeWad.h"
 #endif
 #include "DiscIO/VolumeWii.h"
@@ -144,7 +144,7 @@ std::unique_ptr<VolumeDisc> CreateDisc(const std::string& path)
   return CreateDisc(CreateBlobReader(path));
 }
 
-#ifndef DRVZ_BUILD  // libdolphinrvz: discs only
+#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: discs only
 std::unique_ptr<VolumeDisc> CreateDiscForCore(const std::string& path)
 {
   auto reader = CreateBlobReader(path);
@@ -188,7 +188,7 @@ std::unique_ptr<Volume> CreateVolume(std::unique_ptr<BlobReader> reader)
   if (disc)
     return disc;
 
-#ifndef DRVZ_BUILD
+#ifndef WII_GAMECUBE_KIT_BUILD
   std::unique_ptr<VolumeWAD> wad = TryCreateWAD(reader);
   if (wad)
     return wad;

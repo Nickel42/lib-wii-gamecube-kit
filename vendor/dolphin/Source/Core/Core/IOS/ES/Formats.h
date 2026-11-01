@@ -276,7 +276,7 @@ public:
   void OverwriteCommonKeyIndex(u8 index);
 };
 
-#ifndef DRVZ_BUILD  // libdolphinrvz: no emulated NAND
+#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no emulated NAND
 class SharedContentMap final
 {
 public:

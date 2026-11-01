@@ -10,16 +10,16 @@ using LibWiiGameCubeKit.Interop;
 
 namespace LibWiiGameCubeKit
 {
-    public enum DrvzStatus : int
+    public enum WiiGameCubeKitStatus : int
     {
         Ok = 0, InvalidArgument = 1, FileExists = 2, FileOpen = 3, IO = 4, NotADisc = 5, Unsupported = 6,
         Cancelled = 7, OutOfMemory = 8, Internal = 9, AbiMismatch = 10, Conversion = 11
     }
 
-    public enum DrvzPhase : int { Converting = 0, Hashing = 1 }
+    public enum WiiGameCubeKitPhase : int { Converting = 0, Hashing = 1 }
 
     /// <summary>Log levels. Treat values you don't know as <see cref="Warning"/>.</summary>
-    public enum DrvzLogLevel : int { Info = 0, Warning = 1, Error = 2 }
+    public enum WiiGameCubeKitLogLevel : int { Info = 0, Warning = 1, Error = 2 }
 
     public enum DiscContainer : int { Plain = 0, Gcz = 1, Ciso = 2, Wbfs = 3, Tgc = 4, Wia = 5, Rvz = 6, Nfs = 7, Other = 99 }
 
@@ -32,14 +32,14 @@ namespace LibWiiGameCubeKit
     public enum RvzCompression : int { None = 0, Purge = 1, Bzip2 = 2, Lzma = 3, Lzma2 = 4, Zstd = 5 }
 
     /// <summary>A lib-wii-gamecube-kit call failed. <see cref="Status"/> is the C status code.</summary>
-    public sealed class DolphinRvzException : Exception
+    public sealed class WiiGameCubeKitException : Exception
     {
-        public DrvzStatus Status { get; }
-        public DolphinRvzException(DrvzStatus status, string message) : base(message) { Status = status; }
+        public WiiGameCubeKitStatus Status { get; }
+        public WiiGameCubeKitException(WiiGameCubeKitStatus status, string message) : base(message) { Status = status; }
     }
 
     /// <summary>One progress report. <see cref="Ratio"/> is output/input size while writing WIA/RVZ, otherwise 0.</summary>
-    public readonly record struct DrvzProgress(DrvzPhase Phase, double Fraction, double Ratio);
+    public readonly record struct WiiGameCubeKitProgress(WiiGameCubeKitPhase Phase, double Fraction, double Ratio);
 
     public sealed record DiscInfo(
         DiscContainer Container,
@@ -72,9 +72,9 @@ namespace LibWiiGameCubeKit
         public RvzFormat Format { get; set; } = RvzFormat.Rvz;
         /// <summary>WIA and RVZ only. RVZ can't use Purge; WIA can't use Zstd.</summary>
         public RvzCompression Compression { get; set; } = RvzCompression.Zstd;
-        /// <summary>See <see cref="DolphinRvz.CompressionLevels"/>.</summary>
+        /// <summary>See <see cref="WiiGameCubeKit.CompressionLevels"/>.</summary>
         public int CompressionLevel { get; set; } = 5;
-        /// <summary>GCZ, WIA and RVZ; see <see cref="DolphinRvz.IsBlockSizeValid"/>.</summary>
+        /// <summary>GCZ, WIA and RVZ; see <see cref="WiiGameCubeKit.IsBlockSizeValid"/>.</summary>
         public uint BlockSize { get; set; } = 0x20000;
         /// <summary>Zero unused areas of the disc first (makes the image no longer match Redump).</summary>
         public bool Scrub { get; set; }
@@ -89,7 +89,7 @@ namespace LibWiiGameCubeKit
     /// CancellationToken; a cancelled conversion deletes its partial output
     /// and throws OperationCanceledException.
     /// </summary>
-    public sealed class DolphinRvz : IDisposable
+    public sealed class WiiGameCubeKit : IDisposable
     {
         readonly ContextHandle _ctx;
         readonly ProgressCallback _progressCallback; // referenced here so the GC keeps them alive
@@ -99,32 +99,32 @@ namespace LibWiiGameCubeKit
         ExceptionDispatchInfo? _callbackError;
 
         /// <summary>Receives progress reports on the calling thread.</summary>
-        public IProgress<DrvzProgress>? Progress { get; set; }
+        public IProgress<WiiGameCubeKitProgress>? Progress { get; set; }
 
         /// <summary>Receives DolphinTool's warnings and Dolphin's errors on the calling thread.</summary>
-        public Action<DrvzLogLevel, string>? Log { get; set; }
+        public Action<WiiGameCubeKitLogLevel, string>? Log { get; set; }
 
         /// <param name="threads">Compression worker threads; 0 = all processors.</param>
-        public DolphinRvz(int threads = 0)
+        public WiiGameCubeKit(int threads = 0)
         {
-            Check(Native.drvz_context_create(out _ctx), null);
+            Check(Native.wii_gamecube_kit_context_create(out _ctx), null);
             _progressCallback = OnNativeProgress;
             _logCallback = OnNativeLog;
-            Native.drvz_context_set_progress(_ctx, _progressCallback, IntPtr.Zero);
-            Native.drvz_context_set_log(_ctx, _logCallback, IntPtr.Zero);
-            Native.drvz_context_set_num_threads(_ctx, threads);
+            Native.wii_gamecube_kit_context_set_progress(_ctx, _progressCallback, IntPtr.Zero);
+            Native.wii_gamecube_kit_context_set_log(_ctx, _logCallback, IntPtr.Zero);
+            Native.wii_gamecube_kit_context_set_num_threads(_ctx, threads);
         }
 
-        public static string Version => Native.Str(Native.drvz_version());
-        public static int AbiVersion => Native.drvz_abi_version();
+        public static string Version => Native.Str(Native.wii_gamecube_kit_version());
+        public static int AbiVersion => Native.wii_gamecube_kit_abi_version();
 
         /// <summary>Whether <paramref name="blockSize"/> is allowed for <paramref name="format"/> (ISO: only 0).</summary>
-        public static bool IsBlockSizeValid(RvzFormat format, uint blockSize) => Native.drvz_block_size_valid(format, blockSize) != 0;
+        public static bool IsBlockSizeValid(RvzFormat format, uint blockSize) => Native.wii_gamecube_kit_block_size_valid(format, blockSize) != 0;
 
         /// <summary>The levels Dolphin allows (0..0 for None and Purge).</summary>
         public static (int Min, int Max) CompressionLevels(RvzCompression compression)
         {
-            Native.drvz_compression_levels(compression, out int min, out int max);
+            Native.wii_gamecube_kit_compression_levels(compression, out int min, out int max);
             return (min, max);
         }
 
@@ -134,7 +134,7 @@ namespace LibWiiGameCubeKit
             try
             {
                 if (!_ctx.IsClosed)
-                    Native.drvz_context_cancel(_ctx);
+                    Native.wii_gamecube_kit_context_cancel(_ctx);
             }
             catch (ObjectDisposedException)
             {
@@ -144,11 +144,11 @@ namespace LibWiiGameCubeKit
 
         public void Dispose() => _ctx.Dispose();
 
-        /// <summary>Reads what kind of GameCube/Wii image <paramref name="path"/> is. Throws with <see cref="DrvzStatus.NotADisc"/> for anything else.</summary>
+        /// <summary>Reads what kind of GameCube/Wii image <paramref name="path"/> is. Throws with <see cref="WiiGameCubeKitStatus.NotADisc"/> for anything else.</summary>
         public DiscInfo Probe(string path, CancellationToken cancellationToken = default)
         {
             var n = NewDiscInfo();
-            Run(cancellationToken, () => Native.drvz_probe(_ctx, path, ref n));
+            Run(cancellationToken, () => Native.wii_gamecube_kit_probe(_ctx, path, ref n));
             return new DiscInfo(
                 n.Container, n.Platform, Native.Str(n.GameId), Native.Str(n.MakerId), Native.Str(n.InternalName),
                 n.DiscNumber, n.Revision, n.Region, n.DataSize, n.DataSizeIsExact != 0, n.FileSize, n.BlockSize,
@@ -160,7 +160,7 @@ namespace LibWiiGameCubeKit
         public void Convert(string input, string output, ConvertSettings settings, CancellationToken cancellationToken = default)
         {
             var o = new ConvertOptionsNative();
-            Native.drvz_convert_options_init(ref o);
+            Native.wii_gamecube_kit_convert_options_init(ref o);
             o.Input = input;
             o.Output = output;
             o.Format = settings.Format;
@@ -169,15 +169,15 @@ namespace LibWiiGameCubeKit
             o.BlockSize = settings.Format == RvzFormat.Iso ? 0 : settings.BlockSize;
             o.Scrub = settings.Scrub ? 1 : 0;
             o.Overwrite = settings.Overwrite ? 1 : 0;
-            Run(cancellationToken, () => Native.drvz_convert(_ctx, ref o));
+            Run(cancellationToken, () => Native.wii_gamecube_kit_convert(_ctx, ref o));
         }
 
         /// <summary>CRC32, MD5 and SHA-1 of the decoded disc (the bytes a plain ISO of it holds).</summary>
         public DiscHashes Hash(string path, CancellationToken cancellationToken = default)
         {
             var n = new HashResultNative { Crc32 = new byte[9], Md5 = new byte[33], Sha1 = new byte[41] };
-            Native.drvz_hash_result_init(ref n);
-            Run(cancellationToken, () => Native.drvz_hash(_ctx, path, ref n));
+            Native.wii_gamecube_kit_hash_result_init(ref n);
+            Run(cancellationToken, () => Native.wii_gamecube_kit_hash(_ctx, path, ref n));
             return new DiscHashes(Native.Str(n.Crc32), Native.Str(n.Md5), Native.Str(n.Sha1), n.Size, n.SizeIsExact != 0);
         }
 
@@ -187,7 +187,7 @@ namespace LibWiiGameCubeKit
             {
                 GameId = new byte[8], MakerId = new byte[4], InternalName = new byte[256], CompressionMethod = new byte[32],
             };
-            Native.drvz_disc_info_init(ref n);
+            Native.wii_gamecube_kit_disc_info_init(ref n);
             return n;
         }
 
@@ -200,21 +200,21 @@ namespace LibWiiGameCubeKit
 
         // ------------------------------------------------------- internals
 
-        delegate DrvzStatus NativeCall();
+        delegate WiiGameCubeKitStatus NativeCall();
 
         void Run(CancellationToken token, NativeCall call)
         {
             if (Interlocked.Exchange(ref _busy, 1) != 0)
-                throw new InvalidOperationException("This DolphinRvz instance is already running an operation; use one instance per concurrent operation.");
+                throw new InvalidOperationException("This WiiGameCubeKit instance is already running an operation; use one instance per concurrent operation.");
             try
             {
                 ObjectDisposedException.ThrowIf(_ctx.IsClosed, this);
                 token.ThrowIfCancellationRequested();
                 _token = token;
                 _callbackError = null;
-                DrvzStatus status = call();
+                WiiGameCubeKitStatus status = call();
                 _callbackError?.Throw();
-                if (status == DrvzStatus.Cancelled)
+                if (status == WiiGameCubeKitStatus.Cancelled)
                     token.ThrowIfCancellationRequested();
                 Check(status, _ctx);
             }
@@ -226,25 +226,25 @@ namespace LibWiiGameCubeKit
             }
         }
 
-        static void Check(DrvzStatus status, ContextHandle? ctx)
+        static void Check(WiiGameCubeKitStatus status, ContextHandle? ctx)
         {
-            if (status == DrvzStatus.Ok)
+            if (status == WiiGameCubeKitStatus.Ok)
                 return;
-            string message = ctx is { IsInvalid: false, IsClosed: false } ? Native.Str(Native.drvz_last_error(ctx)) : "";
+            string message = ctx is { IsInvalid: false, IsClosed: false } ? Native.Str(Native.wii_gamecube_kit_last_error(ctx)) : "";
             if (message.Length == 0)
-                message = Native.Str(Native.drvz_status_string(status));
-            throw new DolphinRvzException(status, message);
+                message = Native.Str(Native.wii_gamecube_kit_status_string(status));
+            throw new WiiGameCubeKitException(status, message);
         }
 
         // Callbacks run on the operation's thread. Exceptions must not cross
         // into native code: they cancel the operation and are rethrown by Run.
-        int OnNativeProgress(IntPtr user, DrvzPhase phase, double fraction, double ratio)
+        int OnNativeProgress(IntPtr user, WiiGameCubeKitPhase phase, double fraction, double ratio)
         {
             if (_callbackError != null)
                 return 1;
             try
             {
-                Progress?.Report(new DrvzProgress(phase, fraction, ratio));
+                Progress?.Report(new WiiGameCubeKitProgress(phase, fraction, ratio));
                 return _token.IsCancellationRequested ? 1 : 0;
             }
             catch (Exception ex)
@@ -254,7 +254,7 @@ namespace LibWiiGameCubeKit
             }
         }
 
-        void OnNativeLog(IntPtr user, DrvzLogLevel level, IntPtr message)
+        void OnNativeLog(IntPtr user, WiiGameCubeKitLogLevel level, IntPtr message)
         {
             if (_callbackError != null)
                 return;

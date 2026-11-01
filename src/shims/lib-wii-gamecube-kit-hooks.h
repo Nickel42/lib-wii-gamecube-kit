@@ -4,9 +4,9 @@
 
 #pragma once
 
-namespace drvz
+namespace wii_gamecube_kit
 {
 // Compression threads for the MultithreadedCompressor being created on this
 // thread: the calling context's setting, or all processors.
 unsigned int CompressorThreadCount();
-}  // namespace drvz
+}  // namespace wii_gamecube_kit

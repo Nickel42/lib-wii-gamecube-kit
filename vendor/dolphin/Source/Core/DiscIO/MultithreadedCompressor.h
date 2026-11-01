@@ -12,8 +12,8 @@
 
 #include "Common/Assert.h"
 #include "Common/Event.h"
-#ifdef DRVZ_BUILD
-#include "drvz_hooks.h"
+#ifdef WII_GAMECUBE_KIT_BUILD
+#include "lib-wii-gamecube-kit-hooks.h"
 #endif
 
 namespace DiscIO
@@ -49,8 +49,8 @@ public:
       std::function<ConversionResultCode(OutputParameters)> output)
       : m_set_up_compress_thread_state(std::move(set_up_compress_thread_state)),
         m_compress(std::move(compress)), m_output(std::move(output)),
-#ifdef DRVZ_BUILD  // libdolphinrvz: the caller picks the thread count
-        m_threads(drvz::CompressorThreadCount())
+#ifdef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: the caller picks the thread count
+        m_threads(wii_gamecube_kit::CompressorThreadCount())
 #else
         m_threads(std::max<unsigned int>(1, std::thread::hardware_concurrency()))
 #endif

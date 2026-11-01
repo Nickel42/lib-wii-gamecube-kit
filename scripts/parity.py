@@ -1,6 +1,6 @@
-"""Byte-for-byte parity: stock DolphinTool vs lib-wii-gamecube-kit's drvz-cli.
+"""Byte-for-byte parity: stock DolphinTool vs lib-wii-gamecube-kit's lib-wii-gamecube-kit-cli.
 
-    python scripts/parity.py <DolphinTool> <drvz-cli> <work dir> <input image>...
+    python scripts/parity.py <DolphinTool> <lib-wii-gamecube-kit-cli> <work dir> <input image>...
 
 Converts each input with both tools at the same settings (every compression
 method, several levels and block sizes, scrubbing, GCZ) and checks the outputs
@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 
-dolphin_tool, drvz_cli, work = sys.argv[1:4]
+dolphin_tool, wii_gamecube_kit_cli, work = sys.argv[1:4]
 inputs = sys.argv[4:]
 os.makedirs(work, exist_ok=True)
 user_dir = os.path.join(work, 'dolphin-user')
@@ -66,8 +66,8 @@ def dolphin(inp, out, fmt, comp, level, block, scrub):
     run(args)
 
 
-def drvz(inp, out, fmt, comp, level, block, scrub):
-    args = [drvz_cli, 'convert', '-q', '-y', '-i', inp, '-o', out, '-f', fmt]
+def kit(inp, out, fmt, comp, level, block, scrub):
+    args = [wii_gamecube_kit_cli, 'convert', '-q', '-y', '-i', inp, '-o', out, '-f', fmt]
     if comp:
         args += ['-c', comp, '-l', str(level)]
     if block:
@@ -84,9 +84,9 @@ for inp in inputs:
     print(f'{base} ({os.path.getsize(inp)} bytes)')
     for name, fmt, comp, level, block, scrub in cases:
         a = os.path.join(work, f'{base}.{name}.dolphin.{fmt}')
-        b = os.path.join(work, f'{base}.{name}.drvz.{fmt}')
+        b = os.path.join(work, f'{base}.{name}.kit.{fmt}')
         dolphin(inp, a, fmt, comp, level, block, scrub)
-        drvz(inp, b, fmt, comp, level, block, scrub)
+        kit(inp, b, fmt, comp, level, block, scrub)
         same = sha256(a) == sha256(b)
         total += 1
         failures += not same
@@ -96,7 +96,7 @@ for inp in inputs:
             ia = a + '.iso'
             ib = b + '.iso'
             dolphin(a, ia, 'iso', None, None, None, False)
-            drvz(b, ib, 'iso', None, None, None, False)
+            kit(b, ib, 'iso', None, None, None, False)
             same_iso = sha256(ia) == sha256(ib) == sha256(inp)
             total += 1
             failures += not same_iso

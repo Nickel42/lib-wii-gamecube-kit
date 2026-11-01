@@ -26,7 +26,7 @@
 #include "Common/Swap.h"
 #include "Core/CommonTitles.h"
 #include "Core/IOS/Device.h"
-#ifndef DRVZ_BUILD  // libdolphinrvz: no emulated NAND
+#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no emulated NAND
 #include "Core/IOS/FS/FileSystem.h"
 #include "Core/IOS/FS/FileSystemProxy.h"
 #include "Core/IOS/IOS.h"
@@ -543,7 +543,7 @@ void TicketReader::OverwriteCommonKeyIndex(u8 index)
   m_bytes[offsetof(Ticket, common_key_index)] = index;
 }
 
-#ifndef DRVZ_BUILD
+#ifndef WII_GAMECUBE_KIT_BUILD
 struct SharedContentMap::Entry
 {
   // ID string

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds lib-wii-gamecube-kit for macOS as one universal (arm64 + x86_64) dylib,
 # runs the tests of the slice this Mac can run, and copies
-# libwiigckit.dylib into artifacts/native/osx.
+# lib-wii-gamecube-kit.dylib into artifacts/native/osx.
 #
 #   scripts/build-mac.sh
 #
@@ -20,13 +20,13 @@ for arch in arm64 x86_64; do
     tests=ON
     [ "$arch" = "$native_arch" ] || tests=OFF   # can't run the other slice's tests here
     cmake -S "$here" -B "$build" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="$arch" \
-        -DDRVZ_BUILD_TESTS="$tests"
+        -DWII_GAMECUBE_KIT_BUILD_TESTS="$tests"
     cmake --build "$build" --parallel "$jobs"
     if [ "$tests" = ON ]; then ctest --test-dir "$build" --output-on-failure; fi
 done
 
 mkdir -p "$out"
-lipo -create "$here/build-osx-arm64/libwiigckit.dylib" "$here/build-osx-x86_64/libwiigckit.dylib" \
-    -output "$out/libwiigckit.dylib"
-lipo -info "$out/libwiigckit.dylib"
-echo "Built $out/libwiigckit.dylib"
+lipo -create "$here/build-osx-arm64/lib-wii-gamecube-kit.dylib" "$here/build-osx-x86_64/lib-wii-gamecube-kit.dylib" \
+    -output "$out/lib-wii-gamecube-kit.dylib"
+lipo -info "$out/lib-wii-gamecube-kit.dylib"
+echo "Built $out/lib-wii-gamecube-kit.dylib"

@@ -208,7 +208,7 @@ static size_t GetSizeForType(IOSC::ObjectType type, IOSC::ObjectSubType subtype)
 IOSC::IOSC(ConsoleType console_type) : m_console_type(console_type)
 {
   LoadDefaultEntries();
-#ifndef DRVZ_BUILD  // libdolphinrvz: built-in keys only, never a user keys.bin
+#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: built-in keys only, never a user keys.bin
   LoadEntries();
 #endif
 }

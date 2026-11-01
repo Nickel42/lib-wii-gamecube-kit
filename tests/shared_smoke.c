@@ -6,36 +6,36 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "dolphinrvz.h"
+#include "lib-wii-gamecube-kit.h"
 
 /* The C# binding (bindings/csharp/LibWiiGameCubeKit/Native.cs) hard-codes these. */
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
-_Static_assert(sizeof(drvz_disc_info) == 376, "drvz_disc_info layout changed: update Native.cs");
-_Static_assert(sizeof(drvz_convert_options) == 48, "drvz_convert_options layout changed: update Native.cs");
-_Static_assert(sizeof(drvz_hash_result) == 112, "drvz_hash_result layout changed: update Native.cs");
+_Static_assert(sizeof(wii_gamecube_kit_disc_info) == 376, "wii_gamecube_kit_disc_info layout changed: update Native.cs");
+_Static_assert(sizeof(wii_gamecube_kit_convert_options) == 48, "wii_gamecube_kit_convert_options layout changed: update Native.cs");
+_Static_assert(sizeof(wii_gamecube_kit_hash_result) == 112, "wii_gamecube_kit_hash_result layout changed: update Native.cs");
 #endif
 
 int main(int argc, char **argv)
 {
-	drvz_context *ctx = NULL;
-	drvz_disc_info info;
-	drvz_hash_result hash;
+	wii_gamecube_kit_context *ctx = NULL;
+	wii_gamecube_kit_disc_info info;
+	wii_gamecube_kit_hash_result hash;
 
-	if (argc < 2 || drvz_abi_version() != DRVZ_ABI_VERSION)
+	if (argc < 2 || wii_gamecube_kit_abi_version() != WII_GAMECUBE_KIT_ABI_VERSION)
 		return 1;
-	if (drvz_context_create(&ctx) != DRVZ_OK)
+	if (wii_gamecube_kit_context_create(&ctx) != WII_GAMECUBE_KIT_OK)
 		return 1;
-	drvz_disc_info_init(&info);
-	if (drvz_probe(ctx, argv[1], &info) != DRVZ_OK || info.platform != DRVZ_PLATFORM_GAMECUBE) {
-		fprintf(stderr, "probe failed: %s\n", drvz_last_error(ctx));
-		return 1;
-	}
-	drvz_hash_result_init(&hash);
-	if (drvz_hash(ctx, argv[1], &hash) != DRVZ_OK || strlen(hash.sha1) != 40) {
-		fprintf(stderr, "hash failed: %s\n", drvz_last_error(ctx));
+	wii_gamecube_kit_disc_info_init(&info);
+	if (wii_gamecube_kit_probe(ctx, argv[1], &info) != WII_GAMECUBE_KIT_OK || info.platform != WII_GAMECUBE_KIT_PLATFORM_GAMECUBE) {
+		fprintf(stderr, "probe failed: %s\n", wii_gamecube_kit_last_error(ctx));
 		return 1;
 	}
-	printf("%s\n%s %s\n", drvz_version(), info.game_id, hash.sha1);
-	drvz_context_destroy(ctx);
+	wii_gamecube_kit_hash_result_init(&hash);
+	if (wii_gamecube_kit_hash(ctx, argv[1], &hash) != WII_GAMECUBE_KIT_OK || strlen(hash.sha1) != 40) {
+		fprintf(stderr, "hash failed: %s\n", wii_gamecube_kit_last_error(ctx));
+		return 1;
+	}
+	printf("%s\n%s %s\n", wii_gamecube_kit_version(), info.game_id, hash.sha1);
+	wii_gamecube_kit_context_destroy(ctx);
 	return 0;
 }

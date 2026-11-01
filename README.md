@@ -21,47 +21,47 @@ DolphinTool's for the same settings (checked byte for byte, see `scripts/parity.
 
 ## API
 
-`include/dolphinrvz.h` follows the same conventions as lib-chd-kit's
-`chdman.h`: UTF-8 paths, one `drvz_context` per thread, `struct_size`-versioned
+`include/lib-wii-gamecube-kit.h` follows the same conventions as lib-chd-kit's
+`chdman.h`: UTF-8 paths, one `wii_gamecube_kit_context` per thread, `struct_size`-versioned
 option and result structs, a progress callback that can cancel, a log
-callback, and `drvz_last_error()`.
+callback, and `wii_gamecube_kit_last_error()`.
 
 ```c
-drvz_context *ctx;
-drvz_context_create(&ctx);
+wii_gamecube_kit_context *ctx;
+wii_gamecube_kit_context_create(&ctx);
 
-drvz_disc_info info;
-drvz_disc_info_init(&info);
-drvz_probe(ctx, "game.iso", &info);        /* GameCube or Wii? game ID, sizes... */
+wii_gamecube_kit_disc_info info;
+wii_gamecube_kit_disc_info_init(&info);
+wii_gamecube_kit_probe(ctx, "game.iso", &info);        /* GameCube or Wii? game ID, sizes... */
 
-drvz_convert_options opts;
-drvz_convert_options_init(&opts);          /* RVZ, zstd 5, 128 KiB: Dolphin's defaults */
+wii_gamecube_kit_convert_options opts;
+wii_gamecube_kit_convert_options_init(&opts);          /* RVZ, zstd 5, 128 KiB: Dolphin's defaults */
 opts.input = "game.iso";
 opts.output = "game.rvz";
-if (drvz_convert(ctx, &opts) != DRVZ_OK)
-    puts(drvz_last_error(ctx));
+if (wii_gamecube_kit_convert(ctx, &opts) != WII_GAMECUBE_KIT_OK)
+    puts(wii_gamecube_kit_last_error(ctx));
 
-drvz_hash_result hash;                     /* CRC32/MD5/SHA-1 of the plain disc */
-drvz_hash_result_init(&hash);
-drvz_hash(ctx, "game.rvz", &hash);
-drvz_context_destroy(ctx);
+wii_gamecube_kit_hash_result hash;                     /* CRC32/MD5/SHA-1 of the plain disc */
+wii_gamecube_kit_hash_result_init(&hash);
+wii_gamecube_kit_hash(ctx, "game.rvz", &hash);
+wii_gamecube_kit_context_destroy(ctx);
 ```
 
-Output is written to `<output>.drvz-tmp` and renamed when complete, so a
+Output is written to `<output>.lib-wii-gamecube-kit-tmp` and renamed when complete, so a
 failed or cancelled conversion leaves nothing behind.
 
 ## Platforms
 
 | Platform | .NET runtime identifier | Native library | Built by |
 |---|---|---|---|
-| Windows x64 | `win-x64` | `wiigckit.dll` | `scriptsuild-win.cmd x64` |
-| Windows ARM64 | `win-arm64` | `wiigckit.dll` | `scriptsuild-win.cmd arm64` |
-| macOS 11+ (arm64 + x86_64) | `osx-arm64`, `osx-x64` | `libwiigckit.dylib` (universal) | `scripts/build-mac.sh` |
-| Linux x64 / arm64 (glibc 2.35+) | `linux-x64`, `linux-arm64` | `libwiigckit.so` | `scripts/build-linux.sh` |
-| Android 9+ (API 28) arm64-v8a / x86_64 | `android-arm64`, `android-x64` | `libwiigckit.so` | `scripts/build-android.sh` |
+| Windows x64 | `win-x64` | `lib-wii-gamecube-kit.dll` | `scriptsuild-win.cmd x64` |
+| Windows ARM64 | `win-arm64` | `lib-wii-gamecube-kit.dll` | `scriptsuild-win.cmd arm64` |
+| macOS 11+ (arm64 + x86_64) | `osx-arm64`, `osx-x64` | `lib-wii-gamecube-kit.dylib` (universal) | `scripts/build-mac.sh` |
+| Linux x64 / arm64 (glibc 2.35+) | `linux-x64`, `linux-arm64` | `lib-wii-gamecube-kit.so` | `scripts/build-linux.sh` |
+| Android 9+ (API 28) arm64-v8a / x86_64 | `android-arm64`, `android-x64` | `lib-wii-gamecube-kit.so` | `scripts/build-android.sh` |
 
 Every script puts its output in `artifacts/native/<rid>`. Each library exports
-only the `drvz_*` functions and links its C/C++ runtime statically, so it
+only the `wii_gamecube_kit_*` functions and links its C/C++ runtime statically, so it
 needs nothing beyond the OS's own libraries.
 
 ## .NET
@@ -72,17 +72,17 @@ needs nothing beyond the OS's own libraries.
 ```csharp
 using LibWiiGameCubeKit;
 
-using var drvz = new DolphinRvz(threads: 0);       // 0 = all cores
-drvz.Progress = new Progress<DrvzProgress>(p => Console.Write($"{p.Fraction:P0}"));
+using var kit = new WiiGameCubeKit(threads: 0);       // 0 = all cores
+kit.Progress = new Progress<WiiGameCubeKitProgress>(p => Console.Write($"{p.Fraction:P0}"));
 
-DiscInfo info = drvz.Probe("game.iso");            // GameCube or Wii, game ID, sizes...
+DiscInfo info = kit.Probe("game.iso");            // GameCube or Wii, game ID, sizes...
 if (info.CanConvert)
-    drvz.Convert("game.iso", "game.rvz", new ConvertSettings());  // RVZ, zstd 5, 128 KiB
-DiscHashes hashes = drvz.Hash("game.rvz");         // CRC32/MD5/SHA-1 of the plain disc
+    kit.Convert("game.iso", "game.rvz", new ConvertSettings());  // RVZ, zstd 5, 128 KiB
+DiscHashes hashes = kit.Hash("game.rvz");         // CRC32/MD5/SHA-1 of the plain disc
 ```
 
 Operations block (run them on a worker thread), take a `CancellationToken`,
-and throw `DolphinRvzException` with Dolphin's message on failure. One
+and throw `WiiGameCubeKitException` with Dolphin's message on failure. One
 instance runs one operation at a time; use several for parallel work.
 
 Two ways to consume it:
@@ -94,7 +94,7 @@ Two ways to consume it:
   tag) builds all platforms and packs the complete package.
 - **Project reference** from a checkout or git submodule. Reference
   `LibWiiGameCubeKit.csproj` and import
-  `bindings/csharp/LibWiiGameCubeKit/build/LibWiiGameCubeKit.targets`, which
+  `bindings/csharp/LibWiiGameCubeKit/build/lib-wii-gamecube-kit.Native.targets`, which
   copies the native library for the platform being built (from
   `artifacts/native/<rid>`) next to the app, also in single-file publishes.
 
@@ -119,24 +119,24 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The build produces `wiigckit` (shared), `wiigckit_static`, `drvz-cli` and
-the tests. Only the `drvz_*` functions are exported.
+The build produces `lib-wii-gamecube-kit` (shared), `lib-wii-gamecube-kit-static`, `lib-wii-gamecube-kit-cli` and
+the tests. Only the `wii_gamecube_kit_*` functions are exported.
 
 On Android, Dolphin's code is built as plain POSIX code (Dolphin's own
 Android paths go through its app's JNI layer for `content://` URIs), so the
 library takes ordinary file paths, such as those in the app's storage.
 
-`drvz-cli` is a small front end for trying things out:
+`lib-wii-gamecube-kit-cli` is a small front end for trying things out:
 
 ```
-drvz-cli probe game.rvz
-drvz-cli hash game.rvz
-drvz-cli convert -i game.iso -o game.rvz -f rvz -c zstd -l 5 -b 131072
+lib-wii-gamecube-kit-cli probe game.rvz
+lib-wii-gamecube-kit-cli hash game.rvz
+lib-wii-gamecube-kit-cli convert -i game.iso -o game.rvz -f rvz -c zstd -l 5 -b 131072
 ```
 
 ## Tests
 
-`tests/drvz_tests` generates synthetic GameCube and Wii discs (a real FST,
+`tests/lib-wii-gamecube-kit-tests` generates synthetic GameCube and Wii discs (a real FST,
 Nintendo-style junk padding, and an encrypted, hashed Wii partition with one
 deliberately wrong hash), then checks round trips through every format and
 compression method, deterministic output across thread counts, option

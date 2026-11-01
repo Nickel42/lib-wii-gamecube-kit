@@ -5,7 +5,7 @@ diff -ruN a/Core/Core/IOS/ES/Formats.cpp b/Core/Core/IOS/ES/Formats.cpp
  #include "Common/Swap.h"
  #include "Core/CommonTitles.h"
  #include "Core/IOS/Device.h"
-+#ifndef DRVZ_BUILD  // libdolphinrvz: no emulated NAND
++#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no emulated NAND
  #include "Core/IOS/FS/FileSystem.h"
  #include "Core/IOS/FS/FileSystemProxy.h"
  #include "Core/IOS/IOS.h"
@@ -17,7 +17,7 @@ diff -ruN a/Core/Core/IOS/ES/Formats.cpp b/Core/Core/IOS/ES/Formats.cpp
    m_bytes[offsetof(Ticket, common_key_index)] = index;
  }
  
-+#ifndef DRVZ_BUILD
++#ifndef WII_GAMECUBE_KIT_BUILD
  struct SharedContentMap::Entry
  {
    // ID string
@@ -37,7 +37,7 @@ diff -ruN a/Core/Core/IOS/ES/Formats.h b/Core/Core/IOS/ES/Formats.h
    void OverwriteCommonKeyIndex(u8 index);
  };
  
-+#ifndef DRVZ_BUILD  // libdolphinrvz: no emulated NAND
++#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no emulated NAND
  class SharedContentMap final
  {
  public:
@@ -57,7 +57,7 @@ diff -ruN a/Core/Core/IOS/IOSC.cpp b/Core/Core/IOS/IOSC.cpp
  IOSC::IOSC(ConsoleType console_type) : m_console_type(console_type)
  {
    LoadDefaultEntries();
-+#ifndef DRVZ_BUILD  // libdolphinrvz: built-in keys only, never a user keys.bin
++#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: built-in keys only, never a user keys.bin
    LoadEntries();
 +#endif
  }
@@ -70,7 +70,7 @@ diff -ruN a/Core/DiscIO/Blob.cpp b/Core/DiscIO/Blob.cpp
  
  #include "DiscIO/CISOBlob.h"
  #include "DiscIO/CompressedBlob.h"
-+#ifndef DRVZ_BUILD  // libdolphinrvz: no extracted-folder input
++#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no extracted-folder input
  #include "DiscIO/DirectoryBlob.h"
 +#endif
  #include "DiscIO/FileBlob.h"
@@ -80,7 +80,7 @@ diff -ruN a/Core/DiscIO/Blob.cpp b/Core/DiscIO/Blob.cpp
    case NFS_MAGIC:
      return NFSFileReader::Create(std::move(file), filename);
    default:
-+#ifndef DRVZ_BUILD
++#ifndef WII_GAMECUBE_KIT_BUILD
      if (auto directory_blob = DirectoryBlobReader::Create(filename))
        return std::move(directory_blob);
 +#endif
@@ -94,8 +94,8 @@ diff -ruN a/Core/DiscIO/MultithreadedCompressor.h b/Core/DiscIO/MultithreadedCom
  
  #include "Common/Assert.h"
  #include "Common/Event.h"
-+#ifdef DRVZ_BUILD
-+#include "drvz_hooks.h"
++#ifdef WII_GAMECUBE_KIT_BUILD
++#include "lib-wii-gamecube-kit-hooks.h"
 +#endif
  
  namespace DiscIO
@@ -104,8 +104,8 @@ diff -ruN a/Core/DiscIO/MultithreadedCompressor.h b/Core/DiscIO/MultithreadedCom
        std::function<ConversionResultCode(OutputParameters)> output)
        : m_set_up_compress_thread_state(std::move(set_up_compress_thread_state)),
          m_compress(std::move(compress)), m_output(std::move(output)),
-+#ifdef DRVZ_BUILD  // libdolphinrvz: the caller picks the thread count
-+        m_threads(drvz::CompressorThreadCount())
++#ifdef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: the caller picks the thread count
++        m_threads(wii_gamecube_kit::CompressorThreadCount())
 +#else
          m_threads(std::max<unsigned int>(1, std::thread::hardware_concurrency()))
 +#endif
@@ -119,20 +119,20 @@ diff -ruN a/Core/DiscIO/Volume.cpp b/Core/DiscIO/Volume.cpp
  #include "Common/Crypto/SHA1.h"
  #include "Common/StringUtil.h"
  
-+#ifndef DRVZ_BUILD  // libdolphinrvz: no emulator config
++#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no emulator config
  #include "Core/Config/MainSettings.h"
 +#endif
  #include "Core/IOS/ES/Formats.h"
  
  #include "DiscIO/Blob.h"
-+#ifndef DRVZ_BUILD  // libdolphinrvz: no CachedBlob or WADs
++#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no CachedBlob or WADs
  #include "DiscIO/CachedBlob.h"
 +#endif
  #include "DiscIO/DiscUtils.h"
  #include "DiscIO/Enums.h"
  #include "DiscIO/VolumeDisc.h"
  #include "DiscIO/VolumeGC.h"
-+#ifndef DRVZ_BUILD
++#ifndef WII_GAMECUBE_KIT_BUILD
  #include "DiscIO/VolumeWad.h"
 +#endif
  #include "DiscIO/VolumeWii.h"
@@ -142,7 +142,7 @@ diff -ruN a/Core/DiscIO/Volume.cpp b/Core/DiscIO/Volume.cpp
    return CreateDisc(CreateBlobReader(path));
  }
  
-+#ifndef DRVZ_BUILD  // libdolphinrvz: discs only
++#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: discs only
  std::unique_ptr<VolumeDisc> CreateDiscForCore(const std::string& path)
  {
    auto reader = CreateBlobReader(path);
@@ -158,7 +158,7 @@ diff -ruN a/Core/DiscIO/Volume.cpp b/Core/DiscIO/Volume.cpp
    if (disc)
      return disc;
  
-+#ifndef DRVZ_BUILD
++#ifndef WII_GAMECUBE_KIT_BUILD
    std::unique_ptr<VolumeWAD> wad = TryCreateWAD(reader);
    if (wad)
      return wad;

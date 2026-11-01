@@ -10,7 +10,7 @@
         picks the right one for each platform, Android APKs included.
       - As a project reference (from a checkout or git submodule): the
         consuming app ships the native library for its platform next to
-        itself, or imports build/LibWiiGameCubeKit.targets, which copies the
+        itself, or imports build/lib-wii-gamecube-kit.Native.targets, which copies the
         one for the platform being built.
   -->
 
@@ -26,7 +26,7 @@
     <Version>0.1.0</Version>
     <IsAotCompatible>true</IsAotCompatible>
 
-    <PackageId>LibWiiGameCubeKit</PackageId>
+    <PackageId>lib-wii-gamecube-kit</PackageId>
     <Authors>Nickel42</Authors>
     <Description>Dolphin's GameCube/Wii disc image conversion (RVZ, WIA, GCZ, ISO), probing and hashing as a .NET library, with native builds for Windows, macOS, Linux and Android.</Description>
     <PackageTags>gamecube;wii;rvz;wia;gcz;dolphin;disc-image</PackageTags>
@@ -38,7 +38,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <WiiGcKitNativeRoot>$(MSBuildThisFileDirectory)../../../artifacts/native</WiiGcKitNativeRoot>
+    <LibWiiGameCubeKitNativeRoot>$(MSBuildThisFileDirectory)../../../artifacts/native</LibWiiGameCubeKitNativeRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -46,28 +46,28 @@
     <None Include="../../../LICENSE" Pack="true" PackagePath="/" Visible="false" />
     <None Include="../../../THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="/" Visible="false" />
     <None Include="../../../vendor/BUNDLED_LICENSES.txt" Pack="true" PackagePath="/" Visible="false" />
-    <None Include="build/LibWiiGameCubeKit.targets" Pack="false" />
+    <None Include="build/lib-wii-gamecube-kit.Native.targets" Pack="false" />
   </ItemGroup>
 
   <!-- Every native build present goes in the package, under its .NET runtime identifier. -->
   <ItemGroup>
-    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/win-x64/wiigckit.dll" Rid="win-x64" />
-    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/win-arm64/wiigckit.dll" Rid="win-arm64" />
-    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/osx/libwiigckit.dylib" Rid="osx" />
-    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/linux-x64/libwiigckit.so" Rid="linux-x64" />
-    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/linux-arm64/libwiigckit.so" Rid="linux-arm64" />
-    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/android-arm64/libwiigckit.so" Rid="android-arm64" />
-    <WiiGcKitPackNative Include="$(WiiGcKitNativeRoot)/android-x64/libwiigckit.so" Rid="android-x64" />
+    <LibWiiGameCubeKitPackNative Include="$(LibWiiGameCubeKitNativeRoot)/win-x64/lib-wii-gamecube-kit.dll" Rid="win-x64" />
+    <LibWiiGameCubeKitPackNative Include="$(LibWiiGameCubeKitNativeRoot)/win-arm64/lib-wii-gamecube-kit.dll" Rid="win-arm64" />
+    <LibWiiGameCubeKitPackNative Include="$(LibWiiGameCubeKitNativeRoot)/osx/lib-wii-gamecube-kit.dylib" Rid="osx" />
+    <LibWiiGameCubeKitPackNative Include="$(LibWiiGameCubeKitNativeRoot)/linux-x64/lib-wii-gamecube-kit.so" Rid="linux-x64" />
+    <LibWiiGameCubeKitPackNative Include="$(LibWiiGameCubeKitNativeRoot)/linux-arm64/lib-wii-gamecube-kit.so" Rid="linux-arm64" />
+    <LibWiiGameCubeKitPackNative Include="$(LibWiiGameCubeKitNativeRoot)/android-arm64/lib-wii-gamecube-kit.so" Rid="android-arm64" />
+    <LibWiiGameCubeKitPackNative Include="$(LibWiiGameCubeKitNativeRoot)/android-x64/lib-wii-gamecube-kit.so" Rid="android-x64" />
   </ItemGroup>
 
   <Target Name="AddNativeToPackage" BeforeTargets="_GetPackageFiles">
     <ItemGroup>
-      <_WiiGcKitPresentNative Include="@(WiiGcKitPackNative)" Condition="Exists('%(WiiGcKitPackNative.FullPath)')" />
-      <_WiiGcKitMissingNative Include="@(WiiGcKitPackNative)" Condition="!Exists('%(WiiGcKitPackNative.FullPath)')" />
-      <None Include="@(_WiiGcKitPresentNative)" Pack="true" PackagePath="runtimes/%(_WiiGcKitPresentNative.Rid)/native/" />
+      <_LibWiiGameCubeKitPresentNative Include="@(LibWiiGameCubeKitPackNative)" Condition="Exists('%(LibWiiGameCubeKitPackNative.FullPath)')" />
+      <_LibWiiGameCubeKitMissingNative Include="@(LibWiiGameCubeKitPackNative)" Condition="!Exists('%(LibWiiGameCubeKitPackNative.FullPath)')" />
+      <None Include="@(_LibWiiGameCubeKitPresentNative)" Pack="true" PackagePath="runtimes/%(_LibWiiGameCubeKitPresentNative.Rid)/native/" />
     </ItemGroup>
-    <Error Condition="'$(RequireNativeForPack)' == 'true' And '@(_WiiGcKitMissingNative)' != ''"
-           Text="Native builds missing from the package (build them with scripts/, or pass -p:RequireNativeForPack=false): @(_WiiGcKitMissingNative->'%(FullPath)', ', ')" />
+    <Error Condition="'$(RequireNativeForPack)' == 'true' And '@(_LibWiiGameCubeKitMissingNative)' != ''"
+           Text="Native builds missing from the package (build them with scripts/, or pass -p:RequireNativeForPack=false): @(_LibWiiGameCubeKitMissingNative->'%(FullPath)', ', ')" />
   </Target>
 
 </Project>

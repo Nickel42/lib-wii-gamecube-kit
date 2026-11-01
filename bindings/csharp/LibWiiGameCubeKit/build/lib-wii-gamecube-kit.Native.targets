@@ -1,0 +1,63 @@
+<Project>
+  <!--
+    For apps that reference LibWiiGameCubeKit.csproj directly (a checkout or a
+    git submodule) instead of the NuGet package: import this file to ship the
+    native library for the platform being built next to the app.
+
+      <Import Project="<checkout>/bindings/csharp/LibWiiGameCubeKit/build/lib-wii-gamecube-kit.Native.targets" />
+
+    The library is taken from <checkout>/artifacts/native/<dir>, where the
+    scripts in scripts/ put it. <dir> follows the RuntimeIdentifier:
+
+      win-x64        -> win-x64/lib-wii-gamecube-kit.dll
+      win-arm64      -> win-arm64/lib-wii-gamecube-kit.dll
+      osx-*          -> osx/lib-wii-gamecube-kit.dylib   (universal arm64 + x86_64)
+      linux-x64      -> linux-x64/lib-wii-gamecube-kit.so
+      linux-arm64    -> linux-arm64/lib-wii-gamecube-kit.so
+      android-arm64  -> android-arm64/lib-wii-gamecube-kit.so
+      android-x64    -> android-x64/lib-wii-gamecube-kit.so
+
+    With no RuntimeIdentifier, the machine doing the build decides. Set
+    LibWiiGameCubeKitNativeDir to pick another <dir>, or LibWiiGameCubeKitLibDir to point at any
+    folder holding a build.
+
+    The library stays a separate file even in a single-file publish.
+    Android apps get it from the NuGet package instead (runtimes/android-*).
+  -->
+
+  <PropertyGroup Condition="'$(LibWiiGameCubeKitNativeDir)' == '' And '$(RuntimeIdentifier)' != ''">
+    <LibWiiGameCubeKitNativeDir Condition="$(RuntimeIdentifier.StartsWith('osx'))">osx</LibWiiGameCubeKitNativeDir>
+    <LibWiiGameCubeKitNativeDir Condition="'$(LibWiiGameCubeKitNativeDir)' == ''">$(RuntimeIdentifier)</LibWiiGameCubeKitNativeDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(LibWiiGameCubeKitNativeDir)' == ''">
+    <_LibWiiGameCubeKitArch>x64</_LibWiiGameCubeKitArch>
+    <_LibWiiGameCubeKitArch Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">arm64</_LibWiiGameCubeKitArch>
+    <LibWiiGameCubeKitNativeDir Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx</LibWiiGameCubeKitNativeDir>
+    <LibWiiGameCubeKitNativeDir Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux-$(_LibWiiGameCubeKitArch)</LibWiiGameCubeKitNativeDir>
+    <LibWiiGameCubeKitNativeDir Condition="'$(LibWiiGameCubeKitNativeDir)' == ''">win-$(_LibWiiGameCubeKitArch)</LibWiiGameCubeKitNativeDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <LibWiiGameCubeKitLibDir Condition="'$(LibWiiGameCubeKitLibDir)' == ''">$(MSBuildThisFileDirectory)../../../../artifacts/native/$(LibWiiGameCubeKitNativeDir)</LibWiiGameCubeKitLibDir>
+    <LibWiiGameCubeKitLibName Condition="$(LibWiiGameCubeKitNativeDir.StartsWith('win'))">lib-wii-gamecube-kit.dll</LibWiiGameCubeKitLibName>
+    <LibWiiGameCubeKitLibName Condition="'$(LibWiiGameCubeKitNativeDir)' == 'osx'">lib-wii-gamecube-kit.dylib</LibWiiGameCubeKitLibName>
+    <LibWiiGameCubeKitLibName Condition="'$(LibWiiGameCubeKitLibName)' == ''">lib-wii-gamecube-kit.so</LibWiiGameCubeKitLibName>
+    <LibWiiGameCubeKitLibPath>$([System.IO.Path]::GetFullPath('$(LibWiiGameCubeKitLibDir)/$(LibWiiGameCubeKitLibName)'))</LibWiiGameCubeKitLibPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(LibWiiGameCubeKitLibPath)" Condition="Exists('$(LibWiiGameCubeKitLibPath)')" Link="$(LibWiiGameCubeKitLibName)"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" Visible="false" />
+  </ItemGroup>
+
+  <!-- A plain build may go without it (with a warning); a publish for a platform must include it. -->
+  <Target Name="WarnMissingLibWiiGameCubeKitNative" BeforeTargets="Build" Condition="!Exists('$(LibWiiGameCubeKitLibPath)')">
+    <Warning Text="No lib-wii-gamecube-kit native library at $(LibWiiGameCubeKitLibPath); GameCube/Wii operations won't work. Build it with scripts/build-win.cmd, build-mac.sh, build-linux.sh or build-android.sh in lib-wii-gamecube-kit." />
+  </Target>
+  <Target Name="RequireLibWiiGameCubeKitNativeForPublish" BeforeTargets="PrepareForPublish"
+          Condition="'$(RuntimeIdentifier)' != '' And !Exists('$(LibWiiGameCubeKitLibPath)')">
+    <Error Text="Can't publish for $(RuntimeIdentifier): lib-wii-gamecube-kit's native library is missing ($(LibWiiGameCubeKitLibPath))." />
+  </Target>
+</Project>

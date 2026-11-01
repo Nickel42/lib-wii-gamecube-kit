@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds lib-wii-gamecube-kit for Linux on this machine's architecture (x64 or
-# arm64), runs its tests, and copies libwiigckit.so and drvz-cli into
+# arm64), runs its tests, and copies lib-wii-gamecube-kit.so and lib-wii-gamecube-kit-cli into
 # artifacts/native/linux-<arch>.
 #
 #   scripts/build-linux.sh
@@ -29,6 +29,6 @@ cmake --build "$build" --parallel "$jobs"
 ctest --test-dir "$build" --output-on-failure
 
 mkdir -p "$out"
-cp -L "$build/libwiigckit.so" "$out/libwiigckit.so"
-cp "$build/drvz-cli" "$out/drvz-cli"
-echo "Built $out/libwiigckit.so"
+cp -L "$build/lib-wii-gamecube-kit.so" "$out/lib-wii-gamecube-kit.so"
+cp "$build/lib-wii-gamecube-kit-cli" "$out/lib-wii-gamecube-kit-cli"
+echo "Built $out/lib-wii-gamecube-kit.so"

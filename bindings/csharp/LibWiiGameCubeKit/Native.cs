@@ -1,5 +1,5 @@
-// Raw P/Invoke layer for lib-wii-gamecube-kit (dolphinrvz.h). Struct layouts mirror
-// the C header exactly; the public API lives in DolphinRvz.cs.
+// Raw P/Invoke layer for lib-wii-gamecube-kit (lib-wii-gamecube-kit.h). Struct layouts mirror
+// the C header exactly; the public API lives in WiiGameCubeKit.cs.
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using System;
@@ -9,19 +9,19 @@ using System.Text;
 namespace LibWiiGameCubeKit.Interop
 {
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    internal delegate int ProgressCallback(IntPtr user, DrvzPhase phase, double fraction, double ratio);
+    internal delegate int ProgressCallback(IntPtr user, WiiGameCubeKitPhase phase, double fraction, double ratio);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    internal delegate void LogCallback(IntPtr user, DrvzLogLevel level, IntPtr message);
+    internal delegate void LogCallback(IntPtr user, WiiGameCubeKitLogLevel level, IntPtr message);
 
-    /// <summary>Owns a drvz_context. Passing it to a native call keeps it alive for the call's duration.</summary>
+    /// <summary>Owns a wii_gamecube_kit_context. Passing it to a native call keeps it alive for the call's duration.</summary>
     internal sealed class ContextHandle : SafeHandle
     {
         public ContextHandle() : base(IntPtr.Zero, ownsHandle: true) { }
         public override bool IsInvalid => handle == IntPtr.Zero;
         protected override bool ReleaseHandle()
         {
-            Native.drvz_context_destroy(handle);
+            Native.wii_gamecube_kit_context_destroy(handle);
             return true;
         }
     }
@@ -77,8 +77,8 @@ namespace LibWiiGameCubeKit.Interop
 
     internal static class Native
     {
-        // wiigckit.dll, libwiigckit.dylib or libwiigckit.so.
-        const string Lib = "wiigckit";
+        // lib-wii-gamecube-kit.dll, lib-wii-gamecube-kit.dylib or lib-wii-gamecube-kit.so.
+        const string Lib = "lib-wii-gamecube-kit";
 
         /// <summary>sizeof() of the C structs on 64-bit platforms (checked by the tests on both sides).</summary>
         public const int DiscInfoSize = 376, ConvertOptionsSize = 48, HashResultSize = 112;
@@ -93,27 +93,27 @@ namespace LibWiiGameCubeKit.Interop
             return Encoding.UTF8.GetString(bytes, 0, n < 0 ? bytes.Length : n);
         }
 
-        [DllImport(Lib)] public static extern IntPtr drvz_status_string(DrvzStatus status);
-        [DllImport(Lib)] public static extern IntPtr drvz_version();
-        [DllImport(Lib)] public static extern int drvz_abi_version();
+        [DllImport(Lib)] public static extern IntPtr wii_gamecube_kit_status_string(WiiGameCubeKitStatus status);
+        [DllImport(Lib)] public static extern IntPtr wii_gamecube_kit_version();
+        [DllImport(Lib)] public static extern int wii_gamecube_kit_abi_version();
 
-        [DllImport(Lib)] public static extern DrvzStatus drvz_context_create(out ContextHandle ctx);
-        [DllImport(Lib)] public static extern void drvz_context_destroy(IntPtr ctx);
-        [DllImport(Lib)] public static extern void drvz_context_set_progress(ContextHandle ctx, ProgressCallback? fn, IntPtr user);
-        [DllImport(Lib)] public static extern void drvz_context_set_log(ContextHandle ctx, LogCallback? fn, IntPtr user);
-        [DllImport(Lib)] public static extern void drvz_context_set_num_threads(ContextHandle ctx, int count);
-        [DllImport(Lib)] public static extern void drvz_context_cancel(ContextHandle ctx);
-        [DllImport(Lib)] public static extern IntPtr drvz_last_error(ContextHandle ctx);
+        [DllImport(Lib)] public static extern WiiGameCubeKitStatus wii_gamecube_kit_context_create(out ContextHandle ctx);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_context_destroy(IntPtr ctx);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_context_set_progress(ContextHandle ctx, ProgressCallback? fn, IntPtr user);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_context_set_log(ContextHandle ctx, LogCallback? fn, IntPtr user);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_context_set_num_threads(ContextHandle ctx, int count);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_context_cancel(ContextHandle ctx);
+        [DllImport(Lib)] public static extern IntPtr wii_gamecube_kit_last_error(ContextHandle ctx);
 
-        [DllImport(Lib)] public static extern void drvz_disc_info_init(ref DiscInfoNative info);
-        [DllImport(Lib)] public static extern DrvzStatus drvz_probe(ContextHandle ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, ref DiscInfoNative info);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_disc_info_init(ref DiscInfoNative info);
+        [DllImport(Lib)] public static extern WiiGameCubeKitStatus wii_gamecube_kit_probe(ContextHandle ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, ref DiscInfoNative info);
 
-        [DllImport(Lib)] public static extern void drvz_convert_options_init(ref ConvertOptionsNative opts);
-        [DllImport(Lib)] public static extern DrvzStatus drvz_convert(ContextHandle ctx, [In] ref ConvertOptionsNative opts);
-        [DllImport(Lib)] public static extern int drvz_block_size_valid(RvzFormat format, uint blockSize);
-        [DllImport(Lib)] public static extern void drvz_compression_levels(RvzCompression compression, out int min, out int max);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_convert_options_init(ref ConvertOptionsNative opts);
+        [DllImport(Lib)] public static extern WiiGameCubeKitStatus wii_gamecube_kit_convert(ContextHandle ctx, [In] ref ConvertOptionsNative opts);
+        [DllImport(Lib)] public static extern int wii_gamecube_kit_block_size_valid(RvzFormat format, uint blockSize);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_compression_levels(RvzCompression compression, out int min, out int max);
 
-        [DllImport(Lib)] public static extern void drvz_hash_result_init(ref HashResultNative result);
-        [DllImport(Lib)] public static extern DrvzStatus drvz_hash(ContextHandle ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, ref HashResultNative result);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_hash_result_init(ref HashResultNative result);
+        [DllImport(Lib)] public static extern WiiGameCubeKitStatus wii_gamecube_kit_hash(ContextHandle ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, ref HashResultNative result);
     }
 }

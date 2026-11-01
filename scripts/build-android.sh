@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds lib-wii-gamecube-kit for Android (arm64-v8a and x86_64) with the NDK
-# and copies libwiigckit.so into artifacts/native/android-arm64 and
+# and copies lib-wii-gamecube-kit.so into artifacts/native/android-arm64 and
 # artifacts/native/android-x64, the .NET runtime identifiers.
 #
 #   ANDROID_NDK_HOME=/path/to/ndk scripts/build-android.sh [abi...]
@@ -34,9 +34,9 @@ for abi in "${abis[@]}"; do
     cmake -S "$here" -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
         -DANDROID_ABI="$abi" -DANDROID_PLATFORM="android-$api" -DANDROID_STL=c++_static \
-        -DDRVZ_BUILD_TESTS=OFF -DDRVZ_BUILD_CLI=OFF
-    cmake --build "$build" --parallel --target wiigckit
+        -DWII_GAMECUBE_KIT_BUILD_TESTS=OFF -DWII_GAMECUBE_KIT_BUILD_CLI=OFF
+    cmake --build "$build" --parallel --target lib-wii-gamecube-kit
     mkdir -p "$here/artifacts/native/$rid"
-    cp -L "$build/libwiigckit.so" "$here/artifacts/native/$rid/libwiigckit.so"
-    echo "Built $here/artifacts/native/$rid/libwiigckit.so"
+    cp -L "$build/lib-wii-gamecube-kit.so" "$here/artifacts/native/$rid/lib-wii-gamecube-kit.so"
+    echo "Built $here/artifacts/native/$rid/lib-wii-gamecube-kit.so"
 done

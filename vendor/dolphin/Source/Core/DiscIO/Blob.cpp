@@ -15,7 +15,7 @@
 
 #include "DiscIO/CISOBlob.h"
 #include "DiscIO/CompressedBlob.h"
-#ifndef DRVZ_BUILD  // libdolphinrvz: no extracted-folder input
+#ifndef WII_GAMECUBE_KIT_BUILD  // lib-wii-gamecube-kit: no extracted-folder input
 #include "DiscIO/DirectoryBlob.h"
 #endif
 #include "DiscIO/FileBlob.h"
@@ -244,7 +244,7 @@ std::unique_ptr<BlobReader> CreateBlobReader(const std::string& filename)
   case NFS_MAGIC:
     return NFSFileReader::Create(std::move(file), filename);
   default:
-#ifndef DRVZ_BUILD
+#ifndef WII_GAMECUBE_KIT_BUILD
     if (auto directory_blob = DirectoryBlobReader::Create(filename))
       return std::move(directory_blob);
 #endif

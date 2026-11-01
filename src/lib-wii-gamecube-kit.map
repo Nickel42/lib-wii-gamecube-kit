@@ -1,0 +1,7 @@
+/* Only the wii_gamecube_kit_* C API is exported. */
+{
+  global:
+    wii_gamecube_kit_*;
+  local:
+    *;
+};

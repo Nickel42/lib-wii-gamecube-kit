@@ -10,9 +10,9 @@ Dolphin research checkout, `C:\Code\Claude\dolphintool`).
 Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
 
 - `scripts\build-win.cmd x64` builds everything, runs `ctest` (4/4 pass, 264
-  checks in `drvz_tests`), and copies `wiigckit.dll` and `drvz-cli.exe` to
+  checks in `lib-wii-gamecube-kit-tests`), and copies `lib-wii-gamecube-kit.dll` and `lib-wii-gamecube-kit-cli.exe` to
   `native\out\win-x64`.
-- `wiigckit.dll` exports exactly the 18 `drvz_*` functions and depends only
+- `lib-wii-gamecube-kit.dll` exports exactly the 18 `wii_gamecube_kit_*` functions and depends only
   on KERNEL32, USER32 and ADVAPI32 (static CRT).
 - Round trips (ISO -> format -> ISO, byte-identical, hashes equal) pass for
   GameCube and Wii synthetic discs with RVZ zstd/LZMA2/none, WIA
@@ -21,7 +21,7 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
 - RVZ junk packing works: an 8 MiB synthetic GameCube disc that is mostly
   junk becomes 243 KB.
 - Linux x64: `scripts/build-linux.sh` builds and passes ctest 4/4 with GCC 15
-  (WSL Ubuntu 26.04). The .so exports only the 18 `drvz_*` functions and,
+  (WSL Ubuntu 26.04). The .so exports only the 18 `wii_gamecube_kit_*` functions and,
   with libstdc++ linked statically, needs nothing but libc.
 - The C# binding (`bindings/csharp/LibWiiGameCubeKit`) and the NoIntrovert
   integration are done; the app's self-test covers them on Windows x64.
@@ -56,18 +56,18 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
 - **WBFS, CISO and NFS can't be converted.** Dolphin's converters ASSERT that
   the data size is exact, and Dolphin's GUI only offers conversion for
   such images (`GameFile::ShouldAllowConversion`). The library returns
-  `DRVZ_ERR_UNSUPPORTED`. Supporting WBFS (common for Wii) would mean
+  `WII_GAMECUBE_KIT_ERR_UNSUPPORTED`. Supporting WBFS (common for Wii) would mean
   working out the real disc size (single/dual layer) ourselves, which
   Dolphin deliberately doesn't do. That changes the original plan's scope.
-- **Errors** come from Dolphin's `PanicAlert`s. `drvz_context_create`
+- **Errors** come from Dolphin's `PanicAlert`s. `wii_gamecube_kit_context_create`
   installs an alert handler that stores them per thread for
-  `drvz_last_error()`. Alerts on Dolphin's worker threads have no context and
+  `wii_gamecube_kit_last_error()`. Alerts on Dolphin's worker threads have no context and
   are dropped, but Dolphin reports those failures again on the calling thread.
 - **Progress ratio** is parsed from Dolphin's progress text ("... Compression
   ratio N%"). The text is never translated here (`GetStringT` is the
   identity), so this is stable, but it's the one place that depends on a
   string.
-- **Threads:** WIA/RVZ/GCZ use `drvz_context_set_num_threads` (default: all
+- **Threads:** WIA/RVZ/GCZ use `wii_gamecube_kit_context_set_num_threads` (default: all
   cores). NoIntrovert runs several jobs in parallel, so it should set this
   from its "threads per job" setting.
-- **Output** goes to `<output>.drvz-tmp` first and is renamed on success.
+- **Output** goes to `<output>.lib-wii-gamecube-kit-tmp` first and is renamed on success.
