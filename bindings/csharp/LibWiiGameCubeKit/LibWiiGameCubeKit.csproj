@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    .NET binding for lib-wii-gamecube-kit. Plain net8.0, so it runs on Windows,
+    .NET binding for lib-wii-gamecube-kit. net8.0 and net10.0, so it runs on Windows,
     macOS, Linux and Android (net8.0-android and later apps can reference it).
 
     Two ways to use it:
@@ -15,7 +15,7 @@
   -->
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

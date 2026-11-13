@@ -66,7 +66,7 @@ needs nothing beyond the OS's own libraries.
 
 ## .NET
 
-`bindings/csharp/LibWiiGameCubeKit` is the .NET binding (`net8.0`, so any
+`bindings/csharp/LibWiiGameCubeKit` is the .NET binding (`net8.0` and `net10.0`, so any
 .NET 8+ app on any of the platforms above, Android included):
 
 ```csharp
