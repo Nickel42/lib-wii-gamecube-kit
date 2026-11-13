@@ -88,7 +88,7 @@ namespace LibWiiGameCubeKit
         /// <summary>
         /// Hash the disc while converting it, and return the hashes from
         /// <see cref="WiiGameCubeKit.Convert"/>. They are of what the output decodes to (with
-        /// <see cref="Scrub"/>, the scrubbed disc), so comparing them with <see cref="WiiGameCubeKit.Hash"/>
+        /// <see cref="Scrub"/>, the scrubbed disc), so comparing them with <see cref="WiiGameCubeKit.Hash(string, DiscHashKinds, System.Threading.CancellationToken)"/>
         /// of the output verifies the conversion without reading the input again.
         /// </summary>
         public DiscHashKinds SourceHashes { get; set; }
