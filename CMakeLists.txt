@@ -4,7 +4,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 endif()
 
-project(lib-wii-gamecube-kit VERSION 0.1.0
+project(lib-wii-gamecube-kit VERSION 0.2.0
   DESCRIPTION "Dolphin's GameCube/Wii disc image conversion (RVZ, WIA, GCZ, ISO) as a library"
   LANGUAGES C CXX)
 
@@ -128,7 +128,7 @@ if(APPLE)
 endif()
 
 # ------------------------------------------------------------- the library
-add_library(lib-wii-gamecube-kit SHARED src/lib-wii-gamecube-kit.cpp)
+add_library(lib-wii-gamecube-kit SHARED src/lib-wii-gamecube-kit.cpp src/lib-wii-gamecube-kit-hashing.cpp)
 target_link_libraries(lib-wii-gamecube-kit PRIVATE lib-wii-gamecube-kit-dolphin)
 target_include_directories(lib-wii-gamecube-kit PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
@@ -157,7 +157,7 @@ if(NOT ANDROID)
 endif()
 
 # Same code linked statically, for tests that look inside (and for the CLI).
-add_library(lib-wii-gamecube-kit-static STATIC src/lib-wii-gamecube-kit.cpp)
+add_library(lib-wii-gamecube-kit-static STATIC src/lib-wii-gamecube-kit.cpp src/lib-wii-gamecube-kit-hashing.cpp)
 set_target_properties(lib-wii-gamecube-kit-static PROPERTIES PREFIX "")
 target_link_libraries(lib-wii-gamecube-kit-static PUBLIC lib-wii-gamecube-kit-dolphin)
 target_compile_definitions(lib-wii-gamecube-kit-static PRIVATE

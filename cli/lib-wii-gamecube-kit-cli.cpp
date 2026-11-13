@@ -4,9 +4,10 @@
 // for trying the library out and for the tests.
 //
 //   lib-wii-gamecube-kit-cli probe <image>
-//   lib-wii-gamecube-kit-cli hash <image>
+//   lib-wii-gamecube-kit-cli hash <image> [-k crc32,md5,sha1] [-t threads]
 //   lib-wii-gamecube-kit-cli convert -i <in> -o <out> [-f rvz|wia|gcz|iso] [-c none|purge|bzip2|lzma|lzma2|zstd]
 //                    [-l level] [-b block_size] [-s] [-y] [-t threads] [-q]
+//                    [-k crc32,md5,sha1] [-V]
 
 #include <cstdio>
 #include <cstdlib>
@@ -54,12 +55,53 @@ int Usage()
   std::fprintf(stderr,
                "%s\n"
                "usage: lib-wii-gamecube-kit-cli probe <image>\n"
-               "       lib-wii-gamecube-kit-cli hash <image>\n"
+               "       lib-wii-gamecube-kit-cli hash <image> [-k crc32,md5,sha1] [-t threads]\n"
                "       lib-wii-gamecube-kit-cli convert -i <in> -o <out> [-f rvz|wia|gcz|iso]\n"
                "                [-c none|purge|bzip2|lzma|lzma2|zstd] [-l level] [-b block_size]\n"
-               "                [-s scrub] [-y overwrite] [-t threads] [-q quiet]\n",
+               "                [-s scrub] [-y overwrite] [-t threads] [-q quiet]\n"
+               "                [-k crc32,md5,sha1: hash the source while converting]\n"
+               "                [-V verify: SHA-1 of the output must match the source's]\n",
                wii_gamecube_kit_version());
   return 2;
+}
+
+// "crc32,md5,sha1" -> WII_GAMECUBE_KIT_HASH_* bits; 0 if something isn't a hash name.
+unsigned ParseHashes(const std::string& list)
+{
+  unsigned bits = 0;
+  size_t start = 0;
+  while (start <= list.size())
+  {
+    const size_t comma = list.find(',', start);
+    const std::string name = list.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+    if (name == "crc32")
+      bits |= WII_GAMECUBE_KIT_HASH_CRC32;
+    else if (name == "md5")
+      bits |= WII_GAMECUBE_KIT_HASH_MD5;
+    else if (name == "sha1")
+      bits |= WII_GAMECUBE_KIT_HASH_SHA1;
+    else if (name == "all")
+      bits |= WII_GAMECUBE_KIT_HASH_ALL;
+    else
+      return 0;
+    if (comma == std::string::npos)
+      break;
+    start = comma + 1;
+  }
+  return bits;
+}
+
+void PrintHashes(const char* title, const wii_gamecube_kit_hash_result& r)
+{
+  if (title != nullptr)
+    std::printf("%s\n", title);
+  if (r.crc32[0])
+    std::printf("crc32 %s\n", r.crc32);
+  if (r.md5[0])
+    std::printf("md5   %s\n", r.md5);
+  if (r.sha1[0])
+    std::printf("sha1  %s\n", r.sha1);
+  std::printf("size  %llu%s\n", static_cast<unsigned long long>(r.size), r.size_is_exact ? "" : " (upper bound)");
 }
 
 const char* PlatformName(wii_gamecube_kit_platform p)
@@ -147,19 +189,36 @@ int Run(int argc, char** argv)
   }
   else if (command == "hash")
   {
+    wii_gamecube_kit_hash_options opts;
+    wii_gamecube_kit_hash_options_init(&opts);
+    for (int i = 3; i < argc; ++i)
+    {
+      const std::string arg = argv[i];
+      if (i + 1 >= argc)
+        return Usage();
+      if (arg == "-k" && (opts.hashes = ParseHashes(argv[++i])) != 0)
+        continue;
+      if (arg == "-t")
+      {
+        wii_gamecube_kit_context_set_num_threads(ctx, std::atoi(argv[++i]));
+        continue;
+      }
+      return Usage();
+    }
     wii_gamecube_kit_hash_result result;
     wii_gamecube_kit_hash_result_init(&result);
-    const wii_gamecube_kit_status status = wii_gamecube_kit_hash(ctx, argv[2], &result);
+    const wii_gamecube_kit_status status = wii_gamecube_kit_hash_ex(ctx, argv[2], &opts, &result);
     if (status != WII_GAMECUBE_KIT_OK)
       return Fail(ctx, status);
-    std::printf("crc32 %s\nmd5   %s\nsha1  %s\nsize  %llu%s\n", result.crc32, result.md5,
-                result.sha1, static_cast<unsigned long long>(result.size),
-                result.size_is_exact ? "" : " (upper bound)");
+    PrintHashes(nullptr, result);
   }
   else if (command == "convert")
   {
     wii_gamecube_kit_convert_options opts;
     wii_gamecube_kit_convert_options_init(&opts);
+    wii_gamecube_kit_hash_result source;
+    wii_gamecube_kit_hash_result_init(&source);
+    bool verify = false;
     for (int i = 2; i < argc; ++i)
     {
       const std::string arg = argv[i];
@@ -228,12 +287,45 @@ int Run(int argc, char** argv)
         wii_gamecube_kit_context_set_num_threads(ctx, std::atoi(value()));
       else if (arg == "-q")
         g_quiet = true;
+      else if (arg == "-k")
+      {
+        const unsigned kinds = ParseHashes(value());
+        if (kinds == 0)
+          return Usage();
+        opts.source_hashes |= kinds;
+      }
+      else if (arg == "-V")
+        verify = true;
       else
         return Usage();
     }
+    if (verify)
+      opts.source_hashes |= WII_GAMECUBE_KIT_HASH_SHA1;
+    if (opts.source_hashes != 0)
+      opts.source_hash = &source;
     const wii_gamecube_kit_status status = wii_gamecube_kit_convert(ctx, &opts);
     if (status != WII_GAMECUBE_KIT_OK)
       return Fail(ctx, status);
+    if (opts.source_hashes != 0)
+      PrintHashes("source:", source);
+    if (verify)
+    {
+      wii_gamecube_kit_hash_options hash_opts;
+      wii_gamecube_kit_hash_options_init(&hash_opts);
+      hash_opts.hashes = WII_GAMECUBE_KIT_HASH_SHA1;
+      wii_gamecube_kit_hash_result made;
+      wii_gamecube_kit_hash_result_init(&made);
+      const wii_gamecube_kit_status hashed = wii_gamecube_kit_hash_ex(ctx, opts.output, &hash_opts, &made);
+      if (hashed != WII_GAMECUBE_KIT_OK)
+        return Fail(ctx, hashed);
+      if (std::strcmp(made.sha1, source.sha1) != 0 || made.size != source.size)
+      {
+        std::fprintf(stderr, "error: verification failed: output SHA-1 %s, source %s\n", made.sha1, source.sha1);
+        wii_gamecube_kit_context_destroy(ctx);
+        return 1;
+      }
+      std::printf("verified\n");
+    }
   }
   else
   {

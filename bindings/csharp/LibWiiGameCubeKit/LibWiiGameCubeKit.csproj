@@ -23,7 +23,7 @@
     <AssemblyName>LibWiiGameCubeKit</AssemblyName>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <IsAotCompatible>true</IsAotCompatible>
 
     <PackageId>lib-wii-gamecube-kit</PackageId>

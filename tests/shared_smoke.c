@@ -11,8 +11,9 @@
 /* The C# binding (bindings/csharp/LibWiiGameCubeKit/Native.cs) hard-codes these. */
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
 _Static_assert(sizeof(wii_gamecube_kit_disc_info) == 376, "wii_gamecube_kit_disc_info layout changed: update Native.cs");
-_Static_assert(sizeof(wii_gamecube_kit_convert_options) == 48, "wii_gamecube_kit_convert_options layout changed: update Native.cs");
+_Static_assert(sizeof(wii_gamecube_kit_convert_options) == 64, "wii_gamecube_kit_convert_options layout changed: update Native.cs");
 _Static_assert(sizeof(wii_gamecube_kit_hash_result) == 112, "wii_gamecube_kit_hash_result layout changed: update Native.cs");
+_Static_assert(sizeof(wii_gamecube_kit_hash_options) == 16, "wii_gamecube_kit_hash_options layout changed: update Native.cs");
 #endif
 
 int main(int argc, char **argv)
@@ -34,6 +35,18 @@ int main(int argc, char **argv)
 	if (wii_gamecube_kit_hash(ctx, argv[1], &hash) != WII_GAMECUBE_KIT_OK || strlen(hash.sha1) != 40) {
 		fprintf(stderr, "hash failed: %s\n", wii_gamecube_kit_last_error(ctx));
 		return 1;
+	}
+	{
+		wii_gamecube_kit_hash_options opts;
+		wii_gamecube_kit_hash_result sha1_only;
+		wii_gamecube_kit_hash_options_init(&opts);
+		opts.hashes = WII_GAMECUBE_KIT_HASH_SHA1;
+		wii_gamecube_kit_hash_result_init(&sha1_only);
+		if (wii_gamecube_kit_hash_ex(ctx, argv[1], &opts, &sha1_only) != WII_GAMECUBE_KIT_OK ||
+		    strcmp(sha1_only.sha1, hash.sha1) != 0 || sha1_only.md5[0] != '\0') {
+			fprintf(stderr, "hash_ex failed: %s\n", wii_gamecube_kit_last_error(ctx));
+			return 1;
+		}
 	}
 	printf("%s\n%s %s\n", wii_gamecube_kit_version(), info.game_id, hash.sha1);
 	wii_gamecube_kit_context_destroy(ctx);

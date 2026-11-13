@@ -31,6 +31,10 @@ namespace LibWiiGameCubeKit
 
     public enum RvzCompression : int { None = 0, Purge = 1, Bzip2 = 2, Lzma = 3, Lzma2 = 4, Zstd = 5 }
 
+    /// <summary>Which hashes to compute. MD5 is the slowest; ask only for what you compare.</summary>
+    [Flags]
+    public enum DiscHashKinds : uint { None = 0, Crc32 = 1, Md5 = 2, Sha1 = 4, All = 7 }
+
     /// <summary>A lib-wii-gamecube-kit call failed. <see cref="Status"/> is the C status code.</summary>
     public sealed class WiiGameCubeKitException : Exception
     {
@@ -64,6 +68,7 @@ namespace LibWiiGameCubeKit
         public bool CanConvert => DataSizeIsExact;
     }
 
+    /// <summary>Lowercase hex digests; "" for a hash that wasn't asked for.</summary>
     public sealed record DiscHashes(string Crc32, string Md5, string Sha1, ulong Size, bool SizeIsExact);
 
     /// <summary>Conversion settings. The defaults are Dolphin's: RVZ, Zstandard level 5, 128 KiB blocks.</summary>
@@ -80,6 +85,13 @@ namespace LibWiiGameCubeKit
         public bool Scrub { get; set; }
         /// <summary>Replace an existing output file.</summary>
         public bool Overwrite { get; set; }
+        /// <summary>
+        /// Hash the disc while converting it, and return the hashes from
+        /// <see cref="WiiGameCubeKit.Convert"/>. They are of what the output decodes to (with
+        /// <see cref="Scrub"/>, the scrubbed disc), so comparing them with <see cref="WiiGameCubeKit.Hash"/>
+        /// of the output verifies the conversion without reading the input again.
+        /// </summary>
+        public DiscHashKinds SourceHashes { get; set; }
     }
 
     /// <summary>
@@ -156,8 +168,11 @@ namespace LibWiiGameCubeKit
                 n.IsNKit != 0, n.IsDatel != 0, n.IsScrubbable != 0);
         }
 
-        /// <summary>Converts <paramref name="input"/> to <paramref name="output"/>. The output appears only when complete.</summary>
-        public void Convert(string input, string output, ConvertSettings settings, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// Converts <paramref name="input"/> to <paramref name="output"/>. The output appears only when complete.
+        /// Returns the hashes <see cref="ConvertSettings.SourceHashes"/> asks for, or null when it asks for none.
+        /// </summary>
+        public DiscHashes? Convert(string input, string output, ConvertSettings settings, CancellationToken cancellationToken = default)
         {
             var o = new ConvertOptionsNative();
             Native.wii_gamecube_kit_convert_options_init(ref o);
@@ -169,17 +184,53 @@ namespace LibWiiGameCubeKit
             o.BlockSize = settings.Format == RvzFormat.Iso ? 0 : settings.BlockSize;
             o.Scrub = settings.Scrub ? 1 : 0;
             o.Overwrite = settings.Overwrite ? 1 : 0;
-            Run(cancellationToken, () => Native.wii_gamecube_kit_convert(_ctx, ref o));
+            if (settings.SourceHashes == DiscHashKinds.None)
+            {
+                Run(cancellationToken, () => Native.wii_gamecube_kit_convert(_ctx, ref o));
+                return null;
+            }
+
+            // The result struct lives in native memory for the call: the options only point to it.
+            var n = NewHashResult();
+            IntPtr result = Marshal.AllocHGlobal(Native.HashResultSize);
+            try
+            {
+                Marshal.StructureToPtr(n, result, false);
+                o.SourceHashes = settings.SourceHashes;
+                o.SourceHash = result;
+                Run(cancellationToken, () => Native.wii_gamecube_kit_convert(_ctx, ref o));
+                return ToHashes(Marshal.PtrToStructure<HashResultNative>(result));
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(result);
+            }
         }
 
         /// <summary>CRC32, MD5 and SHA-1 of the decoded disc (the bytes a plain ISO of it holds).</summary>
-        public DiscHashes Hash(string path, CancellationToken cancellationToken = default)
+        public DiscHashes Hash(string path, CancellationToken cancellationToken = default) =>
+            Hash(path, DiscHashKinds.All, cancellationToken);
+
+        /// <summary>The <paramref name="kinds"/> of hash of the decoded disc; the others are "".</summary>
+        public DiscHashes Hash(string path, DiscHashKinds kinds, CancellationToken cancellationToken = default)
+        {
+            var o = new HashOptionsNative();
+            Native.wii_gamecube_kit_hash_options_init(ref o);
+            o.Hashes = kinds;
+            var n = NewHashResult();
+            Run(cancellationToken, () => Native.wii_gamecube_kit_hash_ex(_ctx, path, ref o, ref n));
+            return ToHashes(n);
+        }
+
+        static HashResultNative NewHashResult()
         {
             var n = new HashResultNative { Crc32 = new byte[9], Md5 = new byte[33], Sha1 = new byte[41] };
             Native.wii_gamecube_kit_hash_result_init(ref n);
-            Run(cancellationToken, () => Native.wii_gamecube_kit_hash(_ctx, path, ref n));
-            return new DiscHashes(Native.Str(n.Crc32), Native.Str(n.Md5), Native.Str(n.Sha1), n.Size, n.SizeIsExact != 0);
+            return n;
         }
+
+        static DiscHashes ToHashes(HashResultNative n) =>
+            new(Native.Str(n.Crc32), Native.Str(n.Md5), Native.Str(n.Sha1), n.Size, n.SizeIsExact != 0);
 
         static DiscInfoNative NewDiscInfo()
         {

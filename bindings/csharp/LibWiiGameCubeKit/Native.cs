@@ -62,6 +62,15 @@ namespace LibWiiGameCubeKit.Interop
         public uint BlockSize;
         public int Scrub;
         public int Overwrite;
+        public DiscHashKinds SourceHashes;
+        public IntPtr SourceHash; // wii_gamecube_kit_hash_result*
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct HashOptionsNative
+    {
+        public nuint StructSize;
+        public DiscHashKinds Hashes;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -81,7 +90,7 @@ namespace LibWiiGameCubeKit.Interop
         const string Lib = "lib-wii-gamecube-kit";
 
         /// <summary>sizeof() of the C structs on 64-bit platforms (checked by the tests on both sides).</summary>
-        public const int DiscInfoSize = 376, ConvertOptionsSize = 48, HashResultSize = 112;
+        public const int DiscInfoSize = 376, ConvertOptionsSize = 64, HashResultSize = 112, HashOptionsSize = 16;
 
         public static string Str(IntPtr p) => Marshal.PtrToStringUTF8(p) ?? "";
 
@@ -115,5 +124,7 @@ namespace LibWiiGameCubeKit.Interop
 
         [DllImport(Lib)] public static extern void wii_gamecube_kit_hash_result_init(ref HashResultNative result);
         [DllImport(Lib)] public static extern WiiGameCubeKitStatus wii_gamecube_kit_hash(ContextHandle ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, ref HashResultNative result);
+        [DllImport(Lib)] public static extern void wii_gamecube_kit_hash_options_init(ref HashOptionsNative opts);
+        [DllImport(Lib)] public static extern WiiGameCubeKitStatus wii_gamecube_kit_hash_ex(ContextHandle ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, [In] ref HashOptionsNative opts, ref HashResultNative result);
     }
 }

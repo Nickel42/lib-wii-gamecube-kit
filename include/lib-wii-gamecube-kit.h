@@ -76,7 +76,7 @@ typedef enum wii_gamecube_kit_status {
 /* Static English description of a status code. Never NULL. */
 WII_GAMECUBE_KIT_API const char *WII_GAMECUBE_KIT_CALL wii_gamecube_kit_status_string(wii_gamecube_kit_status status);
 
-/* Library version, e.g. "lib-wii-gamecube-kit 0.1.0 (Dolphin 1822e385)". */
+/* Library version, e.g. "lib-wii-gamecube-kit 0.2.0 (Dolphin 1822e385)". */
 WII_GAMECUBE_KIT_API const char *WII_GAMECUBE_KIT_CALL wii_gamecube_kit_version(void);
 WII_GAMECUBE_KIT_API int WII_GAMECUBE_KIT_CALL wii_gamecube_kit_abi_version(void);
 
@@ -207,6 +207,16 @@ typedef enum wii_gamecube_kit_format {
 	WII_GAMECUBE_KIT_FORMAT_RVZ = 3
 } wii_gamecube_kit_format;
 
+/* Which hashes to compute: any combination of these bits. */
+typedef enum wii_gamecube_kit_hash_kind {
+	WII_GAMECUBE_KIT_HASH_CRC32 = 1,
+	WII_GAMECUBE_KIT_HASH_MD5 = 2,
+	WII_GAMECUBE_KIT_HASH_SHA1 = 4,
+	WII_GAMECUBE_KIT_HASH_ALL = 7
+} wii_gamecube_kit_hash_kind;
+
+typedef struct wii_gamecube_kit_hash_result wii_gamecube_kit_hash_result;
+
 /*
  * Defaults from wii_gamecube_kit_convert_options_init() match Dolphin's convert dialog:
  * RVZ, Zstandard level 5, 128 KiB blocks, no scrubbing.
@@ -221,6 +231,17 @@ typedef struct wii_gamecube_kit_convert_options {
 	uint32_t block_size;         /* GCZ/WIA/RVZ, see wii_gamecube_kit_block_size_valid() */
 	int scrub;                   /* non-zero: zero out unused data (DolphinTool warns it saves little in RVZ) */
 	int overwrite;               /* non-zero: replace an existing output */
+	/* ---- added in 0.2.0 (ABI 1 structs end before this) ---- */
+	/*
+	 * Hash the disc while converting it: WII_GAMECUBE_KIT_HASH_* bits, 0 = none
+	 * (the default). The hashes are of the disc data the conversion reads, which
+	 * is what the output decodes to: the input's plain disc, or with scrub, the
+	 * scrubbed disc. Comparing them with wii_gamecube_kit_hash() of the output
+	 * verifies a conversion without reading the input a second time. Written to
+	 * *source_hash on success; required when source_hashes is non-zero.
+	 */
+	unsigned int source_hashes;
+	wii_gamecube_kit_hash_result *source_hash;
 } wii_gamecube_kit_convert_options;
 
 WII_GAMECUBE_KIT_API void WII_GAMECUBE_KIT_CALL wii_gamecube_kit_convert_options_init(wii_gamecube_kit_convert_options *opts);
@@ -235,20 +256,34 @@ WII_GAMECUBE_KIT_API void WII_GAMECUBE_KIT_CALL wii_gamecube_kit_compression_lev
 
 /*
  * Hashes the decoded disc (the bytes a plain ISO of it would contain), for
- * comparing against Redump/No-Intro DATs or checking a conversion.
+ * comparing against Redump/No-Intro DATs or checking a conversion. Each hash
+ * runs on its own thread, and compressed containers (GCZ, WIA, RVZ) are
+ * decoded on several threads (wii_gamecube_kit_context_set_num_threads, at
+ * most 6).
  */
-typedef struct wii_gamecube_kit_hash_result {
+struct wii_gamecube_kit_hash_result {
 	size_t struct_size;
-	char crc32[9];               /* lowercase hex */
+	char crc32[9];               /* lowercase hex; "" when not requested */
 	char md5[33];
 	char sha1[41];
 	uint64_t size;               /* bytes hashed */
 	int size_is_exact;           /* 0: the container (e.g. CISO, WBFS) only knows an
 	                                upper bound, so the hashes may include padding */
-} wii_gamecube_kit_hash_result;
+};
+
+/* Added in 0.2.0. */
+typedef struct wii_gamecube_kit_hash_options {
+	size_t struct_size;
+	unsigned int hashes;         /* WII_GAMECUBE_KIT_HASH_* bits; default ALL. Ask only for
+	                                what you compare: MD5 is the slowest of the three. */
+} wii_gamecube_kit_hash_options;
 
 WII_GAMECUBE_KIT_API void WII_GAMECUBE_KIT_CALL wii_gamecube_kit_hash_result_init(wii_gamecube_kit_hash_result *result);
+WII_GAMECUBE_KIT_API void WII_GAMECUBE_KIT_CALL wii_gamecube_kit_hash_options_init(wii_gamecube_kit_hash_options *opts);
+/* All three hashes. */
 WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_kit_hash(wii_gamecube_kit_context *ctx, const char *path, wii_gamecube_kit_hash_result *result);
+/* The hashes opts asks for (NULL = all). Added in 0.2.0. */
+WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_kit_hash_ex(wii_gamecube_kit_context *ctx, const char *path, const wii_gamecube_kit_hash_options *opts, wii_gamecube_kit_hash_result *result);
 
 #ifdef __cplusplus
 }

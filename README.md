@@ -50,6 +50,14 @@ wii_gamecube_kit_context_destroy(ctx);
 Output is written to `<output>.lib-wii-gamecube-kit-tmp` and renamed when complete, so a
 failed or cancelled conversion leaves nothing behind.
 
+**Verifying a conversion quickly.** Set `opts.source_hashes = WII_GAMECUBE_KIT_HASH_SHA1`
+and `opts.source_hash = &source` to hash the disc while it is converted, then
+compare `source.sha1` with `wii_gamecube_kit_hash_ex()` of the output asking for
+SHA-1 only. That skips reading the input a second time, and skips MD5, the
+slowest of the three hashes. Each hash runs on its own thread, and GCZ, WIA and
+RVZ files are decoded on several threads. `lib-wii-gamecube-kit-cli convert -V`
+does exactly this.
+
 ## Platforms
 
 | Platform | .NET runtime identifier | Native library | Built by |
@@ -79,6 +87,10 @@ DiscInfo info = kit.Probe("game.iso");            // GameCube or Wii, game ID, s
 if (info.CanConvert)
     kit.Convert("game.iso", "game.rvz", new ConvertSettings());  // RVZ, zstd 5, 128 KiB
 DiscHashes hashes = kit.Hash("game.rvz");         // CRC32/MD5/SHA-1 of the plain disc
+
+// Convert and verify, reading the input once:
+var source = kit.Convert("game.iso", "game.rvz", new ConvertSettings { SourceHashes = DiscHashKinds.Sha1 });
+bool ok = kit.Hash("game.rvz", DiscHashKinds.Sha1).Sha1 == source!.Sha1;
 ```
 
 Operations block (run them on a worker thread), take a `CancellationToken`,

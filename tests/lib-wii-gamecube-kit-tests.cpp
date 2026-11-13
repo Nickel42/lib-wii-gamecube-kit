@@ -6,6 +6,7 @@
 //   lib-wii-gamecube-kit-tests <work dir>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -98,9 +99,27 @@ wii_gamecube_kit_hash_result Hash(const std::string& path)
   return r;
 }
 
+wii_gamecube_kit_hash_result HashOnly(const std::string& path, unsigned hashes)
+{
+  wii_gamecube_kit_hash_options o;
+  wii_gamecube_kit_hash_options_init(&o);
+  o.hashes = hashes;
+  wii_gamecube_kit_hash_result r;
+  wii_gamecube_kit_hash_result_init(&r);
+  CHECK_STATUS(wii_gamecube_kit_hash_ex(g_ctx, path.c_str(), &o, &r), WII_GAMECUBE_KIT_OK);
+  return r;
+}
+
+bool SameHashes(const wii_gamecube_kit_hash_result& a, const wii_gamecube_kit_hash_result& b)
+{
+  return std::strcmp(a.sha1, b.sha1) == 0 && std::strcmp(a.md5, b.md5) == 0 &&
+         std::strcmp(a.crc32, b.crc32) == 0 && a.size == b.size;
+}
+
 wii_gamecube_kit_status Convert(const std::string& in, const std::string& out, wii_gamecube_kit_format format,
                     wii_gamecube_kit_compression compression, int level, uint32_t block_size,
-                    bool overwrite = true, bool scrub = false)
+                    bool overwrite = true, bool scrub = false,
+                    wii_gamecube_kit_hash_result* source = nullptr)
 {
   wii_gamecube_kit_convert_options o;
   wii_gamecube_kit_convert_options_init(&o);
@@ -112,6 +131,12 @@ wii_gamecube_kit_status Convert(const std::string& in, const std::string& out, w
   o.block_size = block_size;
   o.overwrite = overwrite;
   o.scrub = scrub;
+  if (source != nullptr)
+  {
+    wii_gamecube_kit_hash_result_init(source);
+    o.source_hashes = WII_GAMECUBE_KIT_HASH_ALL;
+    o.source_hash = source;
+  }
   return wii_gamecube_kit_convert(g_ctx, &o);
 }
 
@@ -206,7 +231,9 @@ void RoundTrip(const std::string& iso, const char* tag, wii_gamecube_kit_format 
   const std::string packed = P((std::string(tag) + ".packed").c_str());
   const std::string back = P((std::string(tag) + ".back.iso").c_str());
   ResetObservations();
-  CHECK_STATUS(Convert(iso, packed, format, compression, level, block_size), WII_GAMECUBE_KIT_OK);
+  wii_gamecube_kit_hash_result source;
+  CHECK_STATUS(Convert(iso, packed, format, compression, level, block_size, true, false, &source),
+               WII_GAMECUBE_KIT_OK);
   CHECK(!g_fractions.empty() && g_fractions.back() == 1.0);
   CHECK(fs::exists(U8(packed)));
 
@@ -223,11 +250,18 @@ void RoundTrip(const std::string& iso, const char* tag, wii_gamecube_kit_format 
 
   const wii_gamecube_kit_hash_result a = Hash(iso);
   const wii_gamecube_kit_hash_result b = Hash(packed);
-  CHECK(std::strcmp(a.sha1, b.sha1) == 0 && std::strcmp(a.md5, b.md5) == 0 &&
-        std::strcmp(a.crc32, b.crc32) == 0 && a.size == b.size);
+  CHECK(SameHashes(a, b));
+  CHECK(SameHashes(a, source) && source.size_is_exact);
+  // One decoder instead of several gives the same hashes.
+  wii_gamecube_kit_context_set_num_threads(g_ctx, 1);
+  CHECK(SameHashes(a, Hash(packed)));
+  wii_gamecube_kit_context_set_num_threads(g_ctx, 0);
 
-  CHECK_STATUS(Convert(packed, back, WII_GAMECUBE_KIT_FORMAT_ISO, WII_GAMECUBE_KIT_COMPRESSION_NONE, 0, 0), WII_GAMECUBE_KIT_OK);
+  CHECK_STATUS(Convert(packed, back, WII_GAMECUBE_KIT_FORMAT_ISO, WII_GAMECUBE_KIT_COMPRESSION_NONE, 0, 0,
+                       true, false, &source),
+               WII_GAMECUBE_KIT_OK);
   CHECK(SameFile(iso, back));
+  CHECK(SameHashes(a, source));
   std::printf("  %-28s %9llu -> %9llu bytes\n", tag,
               static_cast<unsigned long long>(fs::file_size(U8(iso))),
               static_cast<unsigned long long>(fs::file_size(U8(packed))));
@@ -367,8 +401,12 @@ void TestScrub(const std::string& gc_iso)
 {
   const std::string out = P("scrubbed.rvz");
   const std::string iso = P("scrubbed.iso");
-  CHECK_STATUS(Convert(gc_iso, out, WII_GAMECUBE_KIT_FORMAT_RVZ, WII_GAMECUBE_KIT_COMPRESSION_ZSTD, 5, 0x20000, true, true),
+  wii_gamecube_kit_hash_result source;
+  CHECK_STATUS(Convert(gc_iso, out, WII_GAMECUBE_KIT_FORMAT_RVZ, WII_GAMECUBE_KIT_COMPRESSION_ZSTD, 5, 0x20000, true, true,
+                       &source),
                WII_GAMECUBE_KIT_OK);
+  CHECK(SameHashes(source, Hash(out)));
+  CHECK(std::strcmp(source.sha1, Hash(gc_iso).sha1) != 0);
   CHECK_STATUS(Convert(out, iso, WII_GAMECUBE_KIT_FORMAT_ISO, WII_GAMECUBE_KIT_COMPRESSION_NONE, 0, 0), WII_GAMECUBE_KIT_OK);
   // Scrubbing zeroes the junk, so the image changes but keeps its size and files.
   CHECK(fs::file_size(U8(iso)) == fs::file_size(U8(gc_iso)));
@@ -378,6 +416,117 @@ void TestScrub(const std::string& gc_iso)
   CHECK(a.size() == b.size() && std::equal(a.begin() + 0x100000, a.begin() + 0x280000, b.begin() + 0x100000));
   fs::remove(U8(out));
   fs::remove(U8(iso));
+}
+
+void TestHashOptions(const std::string& gc_iso, const std::string& wii_iso)
+{
+  for (const std::string& iso : {gc_iso, wii_iso})
+  {
+    const wii_gamecube_kit_hash_result all = Hash(iso);
+    CHECK(std::strlen(all.crc32) == 8 && std::strlen(all.md5) == 32 && std::strlen(all.sha1) == 40);
+
+    const wii_gamecube_kit_hash_result sha1 = HashOnly(iso, WII_GAMECUBE_KIT_HASH_SHA1);
+    CHECK(std::strcmp(sha1.sha1, all.sha1) == 0 && sha1.md5[0] == '\0' && sha1.crc32[0] == '\0');
+    CHECK(sha1.size == all.size && sha1.size_is_exact);
+    const wii_gamecube_kit_hash_result md5 = HashOnly(iso, WII_GAMECUBE_KIT_HASH_MD5);
+    CHECK(std::strcmp(md5.md5, all.md5) == 0 && md5.sha1[0] == '\0');
+    const wii_gamecube_kit_hash_result crc = HashOnly(iso, WII_GAMECUBE_KIT_HASH_CRC32);
+    CHECK(std::strcmp(crc.crc32, all.crc32) == 0 && crc.md5[0] == '\0');
+    CHECK(SameHashes(HashOnly(iso, WII_GAMECUBE_KIT_HASH_ALL), all));
+
+    wii_gamecube_kit_hash_result r;
+    wii_gamecube_kit_hash_result_init(&r);
+    CHECK_STATUS(wii_gamecube_kit_hash_ex(g_ctx, iso.c_str(), nullptr, &r), WII_GAMECUBE_KIT_OK);
+    CHECK(SameHashes(r, all));
+  }
+
+  wii_gamecube_kit_hash_options o;
+  wii_gamecube_kit_hash_options_init(&o);
+  CHECK(o.struct_size == sizeof(o) && o.hashes == WII_GAMECUBE_KIT_HASH_ALL);
+  wii_gamecube_kit_hash_result r;
+  wii_gamecube_kit_hash_result_init(&r);
+  o.hashes = 0;
+  CHECK_STATUS(wii_gamecube_kit_hash_ex(g_ctx, gc_iso.c_str(), &o, &r), WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT);
+  o.hashes = 8;
+  CHECK_STATUS(wii_gamecube_kit_hash_ex(g_ctx, gc_iso.c_str(), &o, &r), WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT);
+  o.hashes = WII_GAMECUBE_KIT_HASH_SHA1;
+  o.struct_size = 4;
+  CHECK_STATUS(wii_gamecube_kit_hash_ex(g_ctx, gc_iso.c_str(), &o, &r), WII_GAMECUBE_KIT_ERR_ABI_MISMATCH);
+
+  // Source hashing: argument checks.
+  const std::string out = P("source-hash.rvz");
+  wii_gamecube_kit_convert_options c;
+  wii_gamecube_kit_convert_options_init(&c);
+  CHECK(c.source_hashes == 0 && c.source_hash == nullptr);
+  c.input = gc_iso.c_str();
+  c.output = out.c_str();
+  c.overwrite = 1;
+  c.source_hashes = WII_GAMECUBE_KIT_HASH_SHA1;
+  CHECK_STATUS(wii_gamecube_kit_convert(g_ctx, &c), WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT);  // no source_hash
+  c.source_hash = &r;
+  c.source_hashes = 16;
+  CHECK_STATUS(wii_gamecube_kit_convert(g_ctx, &c), WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT);
+  CHECK(!fs::exists(U8(out)));
+
+  // A caller built against ABI 1 (0.1.0) passes the shorter struct: the new fields are
+  // ignored, whatever follows it in memory.
+  c.struct_size = offsetof(wii_gamecube_kit_convert_options, source_hashes);
+  c.source_hashes = 16;
+  c.source_hash = nullptr;
+  CHECK_STATUS(wii_gamecube_kit_convert(g_ctx, &c), WII_GAMECUBE_KIT_OK);
+  c.struct_size = c.struct_size - 1;
+  CHECK_STATUS(wii_gamecube_kit_convert(g_ctx, &c), WII_GAMECUBE_KIT_ERR_ABI_MISMATCH);
+
+  // SHA-1 only, during a conversion.
+  wii_gamecube_kit_convert_options_init(&c);
+  c.input = wii_iso.c_str();
+  c.output = out.c_str();
+  c.overwrite = 1;
+  c.source_hashes = WII_GAMECUBE_KIT_HASH_SHA1;
+  c.source_hash = &r;
+  CHECK_STATUS(wii_gamecube_kit_convert(g_ctx, &c), WII_GAMECUBE_KIT_OK);
+  CHECK(std::strcmp(r.sha1, Hash(wii_iso).sha1) == 0 && r.md5[0] == '\0' && r.crc32[0] == '\0');
+  CHECK(std::strcmp(r.sha1, HashOnly(out, WII_GAMECUBE_KIT_HASH_SHA1).sha1) == 0);
+
+  // Cancelling a conversion that is hashing as well.
+  ResetObservations();
+  g_progress_hook = [](double fraction) { return fraction > 0.3 ? 1 : 0; };
+  c.block_size = 0x8000;
+  wii_gamecube_kit_context_set_num_threads(g_ctx, 1);
+  CHECK_STATUS(wii_gamecube_kit_convert(g_ctx, &c), WII_GAMECUBE_KIT_ERR_CANCELLED);
+  wii_gamecube_kit_context_set_num_threads(g_ctx, 0);
+  ResetObservations();
+  CHECK(NoTempFiles());
+  fs::remove(U8(out));
+
+  // Discs big enough for several decoders, each decoding its own 8 MiB pieces in parallel,
+  // which for Wii means groups that straddle two pieces.
+  const std::string big_wii = P("big-wii.iso");
+  const std::string big_gc = P("big-gc.iso");
+  synth::WriteFile(big_wii, synth::MakeWiiDisc(14, true));
+  synth::WriteFile(big_gc, synth::MakeGameCubeDisc(0x2A00000));
+  for (const std::string& iso : {big_wii, big_gc})
+  {
+    const wii_gamecube_kit_hash_result expected = Hash(iso);
+    for (const auto format : {WII_GAMECUBE_KIT_FORMAT_RVZ, WII_GAMECUBE_KIT_FORMAT_WIA, WII_GAMECUBE_KIT_FORMAT_GCZ})
+    {
+      const auto compression = format == WII_GAMECUBE_KIT_FORMAT_RVZ ? WII_GAMECUBE_KIT_COMPRESSION_ZSTD :
+                               format == WII_GAMECUBE_KIT_FORMAT_WIA ? WII_GAMECUBE_KIT_COMPRESSION_LZMA2 :
+                                                                       WII_GAMECUBE_KIT_COMPRESSION_NONE;
+      const uint32_t block = format == WII_GAMECUBE_KIT_FORMAT_RVZ ? 0x20000 :
+                             format == WII_GAMECUBE_KIT_FORMAT_WIA ? 0x200000 : 0x8000;
+      wii_gamecube_kit_hash_result source;
+      CHECK_STATUS(Convert(iso, out, format, compression, 1, block, true, false, &source), WII_GAMECUBE_KIT_OK);
+      CHECK(SameHashes(source, expected));
+      CHECK(SameHashes(Hash(out), expected));
+      wii_gamecube_kit_context_set_num_threads(g_ctx, 3);
+      CHECK(SameHashes(Hash(out), expected));
+      wii_gamecube_kit_context_set_num_threads(g_ctx, 0);
+    }
+  }
+  fs::remove(U8(out));
+  fs::remove(U8(big_wii));
+  fs::remove(U8(big_gc));
 }
 
 void TestUnicodePaths(const std::string& gc_iso)
@@ -426,6 +575,7 @@ int main(int argc, char** argv)
   TestValidation(gc_iso);
   TestCancel(wii_iso);
   TestScrub(gc_iso);
+  TestHashOptions(gc_iso, wii_iso);
   TestUnicodePaths(gc_iso);
 
   // A Wii disc with every hash correct converts too (no hash exceptions).

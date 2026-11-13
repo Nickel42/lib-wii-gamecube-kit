@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <limits>
@@ -20,10 +21,7 @@
 #include <vector>
 
 #include <fmt/format.h>
-#include <mbedtls/md5.h>
-#include <zlib.h>
 
-#include "Common/Crypto/SHA1.h"
 #include "Common/FileUtil.h"
 #include "Common/MsgHandler.h"
 #include "DiscIO/Blob.h"
@@ -33,6 +31,7 @@
 #include "DiscIO/Volume.h"
 #include "DiscIO/VolumeDisc.h"
 #include "DiscIO/WIABlob.h"
+#include "lib-wii-gamecube-kit-hashing.h"
 #include "lib-wii-gamecube-kit-hooks.h"
 #include "lib-wii-gamecube-kit-internal.h"
 
@@ -127,13 +126,19 @@ void CopyString(char (&dst)[N], const std::string& src)
   dst[len] = '\0';
 }
 
-// Reads a caller's options struct: at least the ABI 1 size, newer fields default.
-template <typename T>
-bool ReadStruct(const T* in, T* out)
+// wii_gamecube_kit_convert_options as ABI 1 (0.1.0) defined it, before fields were appended.
+constexpr size_t CONVERT_OPTIONS_ABI1_SIZE =
+    offsetof(wii_gamecube_kit_convert_options, source_hashes);
+
+// Reads a caller's options struct: at least min_size (the ABI 1 size), newer fields
+// beyond the caller's struct_size keep the defaults init gives them.
+template <typename T, typename Init>
+bool ReadStruct(const T* in, T* out, size_t min_size, Init init)
 {
-  if (in->struct_size < sizeof(T))  // ABI 1 is the current layout
+  if (in->struct_size < min_size)
     return false;
-  std::memcpy(out, in, sizeof(T));
+  init(out);
+  std::memcpy(out, in, std::min(in->struct_size, sizeof(T)));
   out->struct_size = sizeof(T);
   return true;
 }
@@ -198,6 +203,19 @@ double ParseRatio(const std::string& text)
   for (size_t i = pos + 6; i < text.size() && text[i] >= '0' && text[i] <= '9'; ++i)
     percent = percent * 10 + (text[i] - '0');
   return percent / 100.0;
+}
+
+void WriteHashResult(wii_gamecube_kit_hash_result* out, const wii_gamecube_kit::Digests& digests, u64 size,
+                     bool size_is_exact)
+{
+  wii_gamecube_kit_hash_result result;
+  wii_gamecube_kit_hash_result_init(&result);
+  CopyString(result.crc32, digests.crc32);
+  CopyString(result.md5, digests.md5);
+  CopyString(result.sha1, digests.sha1);
+  result.size = size;
+  result.size_is_exact = size_is_exact;
+  WriteStruct(out, result);
 }
 
 template <typename F>
@@ -469,12 +487,20 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
     wii_gamecube_kit_convert_options opts;
     if (in_opts == nullptr)
       return op.Fail(WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT, "options are required.");
-    if (!ReadStruct(in_opts, &opts))
+    if (!ReadStruct(in_opts, &opts, CONVERT_OPTIONS_ABI1_SIZE, wii_gamecube_kit_convert_options_init))
       return op.Fail(WII_GAMECUBE_KIT_ERR_ABI_MISMATCH, "wii_gamecube_kit_convert_options.struct_size is too small.");
     if (opts.input == nullptr || opts.output == nullptr || !*opts.input || !*opts.output)
       return op.Fail(WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT, "input and output are required.");
     if (op.Cancelled())
       return op.Fail(WII_GAMECUBE_KIT_ERR_CANCELLED, "Cancelled.");
+
+    const unsigned source_hashes = opts.source_hashes;
+    if ((source_hashes & ~static_cast<unsigned>(wii_gamecube_kit::HASH_ALL)) != 0)
+      return op.Fail(WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT, "Unknown hash in source_hashes.");
+    if (source_hashes != 0 && opts.source_hash == nullptr)
+      return op.Fail(WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT, "source_hashes needs source_hash.");
+    if (source_hashes != 0 && opts.source_hash->struct_size < sizeof(wii_gamecube_kit_hash_result))
+      return op.Fail(WII_GAMECUBE_KIT_ERR_ABI_MISMATCH, "wii_gamecube_kit_hash_result.struct_size is too small.");
 
     const std::string input = opts.input;
     const std::string output = opts.output;
@@ -597,6 +623,16 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
       }
     }
 
+    // Hash what the converter reads (after scrubbing, so it's what the output decodes to).
+    wii_gamecube_kit::HashingBlobReader* hashing = nullptr;
+    if (source_hashes != 0)
+    {
+      auto wrapper = std::make_unique<wii_gamecube_kit::HashingBlobReader>(std::move(blob), source_hashes);
+      hashing = wrapper.get();
+      blob = std::move(wrapper);
+    }
+    const u64 data_size = blob->GetDataSize();
+
     // Write to a temporary file next to the output and rename it on success, so a failed or
     // cancelled conversion never leaves a partial file, or destroys an output being replaced.
     const std::string temp = output + ".lib-wii-gamecube-kit-tmp";
@@ -636,6 +672,9 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
           static_cast<DiscIO::WIARVZCompressionType>(compression), level, block_size, callback);
       break;
     }
+    wii_gamecube_kit::Digests digests;
+    const bool hashed = !success || hashing == nullptr || hashing->Finish(&digests);
+    hashing = nullptr;
     blob.reset();
 
     if (success && ctx->progress != nullptr)
@@ -648,6 +687,11 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
         return op.Fail(WII_GAMECUBE_KIT_ERR_CANCELLED, "Cancelled.");
       return op.Fail(WII_GAMECUBE_KIT_ERR_CONVERSION, "");
     }
+    if (!hashed)
+    {
+      File::Delete(temp, File::IfAbsentBehavior::NoConsoleWarning);
+      return op.Fail(WII_GAMECUBE_KIT_ERR_IO, fmt::format("Failed to hash \"{}\".", input));
+    }
 
     std::error_code ec;
     std::filesystem::rename(U8Path(temp), U8Path(output), ec);
@@ -657,6 +701,8 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
       return op.Fail(WII_GAMECUBE_KIT_ERR_IO, fmt::format("Could not move the finished file to \"{}\": {}",
                                               output, ec.message()));
     }
+    if (source_hashes != 0)
+      WriteHashResult(opts.source_hash, digests, data_size, true);
     return WII_GAMECUBE_KIT_OK;
   });
 }
@@ -669,7 +715,21 @@ WII_GAMECUBE_KIT_API void WII_GAMECUBE_KIT_CALL wii_gamecube_kit_hash_result_ini
   result->struct_size = sizeof(*result);
 }
 
+WII_GAMECUBE_KIT_API void WII_GAMECUBE_KIT_CALL wii_gamecube_kit_hash_options_init(wii_gamecube_kit_hash_options* opts)
+{
+  if (opts == nullptr)
+    return;
+  std::memset(opts, 0, sizeof(*opts));
+  opts->struct_size = sizeof(*opts);
+  opts->hashes = WII_GAMECUBE_KIT_HASH_ALL;
+}
+
 WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_kit_hash(wii_gamecube_kit_context* ctx, const char* path, wii_gamecube_kit_hash_result* out)
+{
+  return wii_gamecube_kit_hash_ex(ctx, path, nullptr, out);
+}
+
+WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_kit_hash_ex(wii_gamecube_kit_context* ctx, const char* path, const wii_gamecube_kit_hash_options* in_opts, wii_gamecube_kit_hash_result* out)
 {
   if (ctx == nullptr)
     return WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT;
@@ -679,31 +739,60 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
       return op.Fail(WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT, "path and result are required.");
     if (out->struct_size < sizeof(wii_gamecube_kit_hash_result))
       return op.Fail(WII_GAMECUBE_KIT_ERR_ABI_MISMATCH, "wii_gamecube_kit_hash_result.struct_size is too small.");
+    wii_gamecube_kit_hash_options opts;
+    wii_gamecube_kit_hash_options_init(&opts);
+    if (in_opts != nullptr && !ReadStruct(in_opts, &opts, sizeof(opts), wii_gamecube_kit_hash_options_init))
+      return op.Fail(WII_GAMECUBE_KIT_ERR_ABI_MISMATCH, "wii_gamecube_kit_hash_options.struct_size is too small.");
+    if (opts.hashes == 0 || (opts.hashes & ~static_cast<unsigned>(wii_gamecube_kit::HASH_ALL)) != 0)
+    {
+      return op.Fail(WII_GAMECUBE_KIT_ERR_INVALID_ARGUMENT,
+                     "hashes must be a non-empty set of WII_GAMECUBE_KIT_HASH_* bits.");
+    }
     if (op.Cancelled())
       return op.Fail(WII_GAMECUBE_KIT_ERR_CANCELLED, "Cancelled.");
 
     std::unique_ptr<DiscIO::BlobReader> blob;
     if (const wii_gamecube_kit_status status = CheckReadable(op, path, &blob); status != WII_GAMECUBE_KIT_OK)
       return status;
-
     const u64 total = blob->GetDataSize();
-    // Read whole container blocks where possible, like ConvertToPlain.
-    constexpr u64 DESIRED_BUFFER_SIZE = 0x200000;
-    u64 buffer_size = blob->GetBlockSize();
-    if (buffer_size == 0)
-      buffer_size = DESIRED_BUFFER_SIZE;
-    while (buffer_size < DESIRED_BUFFER_SIZE)
-      buffer_size *= 2;
-    std::vector<u8> buffer(buffer_size);
+    const bool size_is_exact = blob->GetDataSizeType() == DiscIO::DataSizeType::Accurate;
 
-    uLong crc = crc32(0L, Z_NULL, 0);
-    mbedtls_md5_context md5;
-    mbedtls_md5_init(&md5);
-    mbedtls_md5_starts_ret(&md5);
-    const std::unique_ptr<Common::SHA1::Context> sha1 = Common::SHA1::CreateContext();
-
-    for (u64 pos = 0; pos < total;)
+    // Decoding is the slow part of reading a compressed container (for Wii discs it
+    // includes re-encrypting and re-hashing every partition group), so those get several
+    // readers, each decoding its own pieces. Plain images are limited by the disk: one.
+    const DiscIO::BlobType type = blob->GetBlobType();
+    const bool compressed = type == DiscIO::BlobType::GCZ || type == DiscIO::BlobType::WIA ||
+                            type == DiscIO::BlobType::RVZ || type == DiscIO::BlobType::NFS;
+    constexpr unsigned MAX_DECODERS = 6;
+    const unsigned decoders =
+        compressed ? std::min(MAX_DECODERS, wii_gamecube_kit::CompressorThreadCount()) : 1;
+    const u64 block_size = blob->GetBlockSize();
+    std::vector<std::unique_ptr<DiscIO::BlobReader>> readers;
+    readers.push_back(std::move(blob));
+    while (readers.size() < decoders)
     {
+      std::unique_ptr<DiscIO::BlobReader> reader = DiscIO::CreateBlobReader(path);
+      if (!reader)
+        break;
+      readers.push_back(std::move(reader));
+    }
+
+    // Whole container blocks per piece where possible, like ConvertToPlain. Parallel
+    // pieces are larger: a Wii group that straddles two pieces is decoded by both.
+    const u64 desired = readers.size() > 1 ? 4 * wii_gamecube_kit::HASH_CHUNK_SIZE :
+                                             wii_gamecube_kit::HASH_CHUNK_SIZE;
+    u64 piece = block_size == 0 ? desired : block_size;
+    while (piece < desired)
+      piece *= 2;
+
+    const std::shared_ptr<wii_gamecube_kit::ChunkPool> pool =
+        wii_gamecube_kit::ChunkPool::Create(static_cast<size_t>(piece));
+    wii_gamecube_kit::ParallelHasher hasher(opts.hashes, pool);
+    wii_gamecube_kit::OrderedBlobReading reading(std::move(readers), total, pool);
+
+    for (u64 i = 0; i < reading.PieceCount(); ++i)
+    {
+      const u64 pos = i * piece;
       if (ctx->progress != nullptr &&
           ctx->progress(ctx->progress_user, WII_GAMECUBE_KIT_PHASE_HASHING,
                         static_cast<double>(pos) / static_cast<double>(total), 0.0) != 0)
@@ -711,43 +800,19 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
         ctx->cancel.store(true);
       }
       if (ctx->cancel.load())
-      {
-        mbedtls_md5_free(&md5);
         return op.Fail(WII_GAMECUBE_KIT_ERR_CANCELLED, "Cancelled.");
-      }
-      const u64 size = std::min(buffer_size, total - pos);
-      if (!blob->Read(pos, size, buffer.data()))
-      {
-        mbedtls_md5_free(&md5);
+      wii_gamecube_kit::Chunk chunk = reading.Next();
+      if (!chunk)
         return op.Fail(WII_GAMECUBE_KIT_ERR_IO, fmt::format("Failed to read from \"{}\".", path));
-      }
-      crc = crc32(crc, buffer.data(), static_cast<uInt>(size));
-      mbedtls_md5_update_ret(&md5, buffer.data(), static_cast<size_t>(size));
-      sha1->Update(buffer.data(), static_cast<size_t>(size));
-      pos += size;
+      hasher.Add(std::move(chunk));
     }
 
-    unsigned char md5_digest[16];
-    mbedtls_md5_finish_ret(&md5, md5_digest);
-    mbedtls_md5_free(&md5);
-    const Common::SHA1::Digest sha1_digest = sha1->Finish();
-
-    wii_gamecube_kit_hash_result result;
-    wii_gamecube_kit_hash_result_init(&result);
-    CopyString(result.crc32, fmt::format("{:08x}", static_cast<u32>(crc)));
-    std::string hex;
-    for (unsigned char b : md5_digest)
-      hex += fmt::format("{:02x}", b);
-    CopyString(result.md5, hex);
-    hex.clear();
-    for (u8 b : sha1_digest)
-      hex += fmt::format("{:02x}", b);
-    CopyString(result.sha1, hex);
-    result.size = total;
-    result.size_is_exact = blob->GetDataSizeType() == DiscIO::DataSizeType::Accurate;
+    wii_gamecube_kit::Digests digests;
+    if (!hasher.Finish(&digests))
+      return op.Fail(WII_GAMECUBE_KIT_ERR_OUT_OF_MEMORY, "Out of memory.");
     if (ctx->progress != nullptr)
       ctx->progress(ctx->progress_user, WII_GAMECUBE_KIT_PHASE_HASHING, 1.0, 0.0);
-    WriteStruct(out, result);
+    WriteHashResult(out, digests, total, size_is_exact);
     return WII_GAMECUBE_KIT_OK;
   });
 }

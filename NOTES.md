@@ -12,7 +12,7 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
 - `scripts\build-win.cmd x64` builds everything, runs `ctest` (4/4 pass, 264
   checks in `lib-wii-gamecube-kit-tests`), and copies `lib-wii-gamecube-kit.dll` and `lib-wii-gamecube-kit-cli.exe` to
   `native\out\win-x64`.
-- `lib-wii-gamecube-kit.dll` exports exactly the 18 `wii_gamecube_kit_*` functions and depends only
+- `lib-wii-gamecube-kit.dll` exports exactly the 20 `wii_gamecube_kit_*` functions and depends only
   on KERNEL32, USER32 and ADVAPI32 (static CRT).
 - Round trips (ISO -> format -> ISO, byte-identical, hashes equal) pass for
   GameCube and Wii synthetic discs with RVZ zstd/LZMA2/none, WIA
@@ -21,7 +21,7 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
 - RVZ junk packing works: an 8 MiB synthetic GameCube disc that is mostly
   junk becomes 243 KB.
 - Linux x64: `scripts/build-linux.sh` builds and passes ctest 4/4 with GCC 15
-  (WSL Ubuntu 26.04). The .so exports only the 18 `wii_gamecube_kit_*` functions and,
+  (WSL Ubuntu 26.04). The .so exports only the 20 `wii_gamecube_kit_*` functions and,
   with libstdc++ linked statically, needs nothing but libc.
 - The C# binding (`bindings/csharp/LibWiiGameCubeKit`) and the NoIntrovert
   integration are done; the app's self-test covers them on Windows x64.
@@ -71,3 +71,14 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
   cores). NoIntrovert runs several jobs in parallel, so it should set this
   from its "threads per job" setting.
 - **Output** goes to `<output>.lib-wii-gamecube-kit-tmp` first and is renamed on success.
+- **Hashing (0.2.0)** is `src/lib-wii-gamecube-kit-hashing.*`: one thread per
+  hash, up to 6 decoders for GCZ/WIA/RVZ/NFS (one reader each, 8 MiB pieces,
+  in order), and `HashingBlobReader`, which hashes what a conversion reads.
+  On a 1.46 GB synthetic GameCube disc, convert + verify went from 6.3 s
+  (convert, hash RVZ, hash ISO, all three hashes each) to 1.4 s (`convert -V`).
+- **Dolphin quirk:** when one `Read` makes the WIA/RVZ reader re-encrypt more
+  than one uncached Wii group, hash exceptions collected for the first group
+  are applied to the next as well, giving wrong data. Sequential 2 MiB reads
+  (`ConvertToPlain`) escape it through the group cache. The parallel decoders
+  read one 32 KiB Wii block at a time for this reason; the test disc with a
+  wrong H0 hash catches it.
