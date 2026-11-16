@@ -86,6 +86,19 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
   42-46 MB/s for GameCube and from 24 to 56 MB/s for Wii, with byte-identical
   output. From a warm file cache it's as fast as before (0.6 s GameCube, ~2 s Wii
   on 24 cores). Not used when scrubbing (ScrubbedBlob does its own reads).
+- **Wii groups in parallel decoders (0.2.2):** a decoder re-encrypts and
+  re-hashes every 2 MiB Wii group it reads. Dolphin's `EncryptGroup` starts 64
+  hashing tasks and one AES task per core for each group, whatever the context's
+  thread count, so six decoders asked for up to ~90 tasks each per group. The
+  decoders now set `WiiGroupThreadCount()` (patch in `VolumeWii.cpp`) to their
+  share of the context's threads; `EncryptGroup` then hashes 8 blocks per task
+  while the decoder reads on, encrypts with that many tasks, and reuses its
+  buffers. Every other caller (one reader alone, Dolphin's converters) keeps
+  Dolphin's code. Their pieces also start on the game partition's group grid
+  (a short first piece), so no group is decoded by two decoders. Hashing a real
+  Wii RVZ (4.7 GB, 24 cores, warm cache) takes 2.3 s instead of 2.5 s (the
+  SHA-1 thread sets the pace); with 4 threads it's as fast as before on 4 cores
+  instead of all 24.
 - **Dolphin quirk:** when one `Read` makes the WIA/RVZ reader re-encrypt more
   than one uncached Wii group, hash exceptions collected for the first group
   are applied to the next as well, giving wrong data. Sequential 2 MiB reads

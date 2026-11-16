@@ -147,6 +147,11 @@ private:
 // Each reader fetches its piece in Reads of read_size bytes. Decoders need one Wii block
 // (0x8000, the default; see the .cpp). Plain images should read whole pieces: on a network
 // share or a cold disk, several large reads at once are what make reading fast.
+//
+// Pieces are the pool's chunk size, except that piece 0 can be shorter (first_piece), to
+// put every later boundary on a Wii group boundary. group_threads is what
+// WiiGroupThreadCount() returns on the readers' threads: the share of the context's
+// threads each decoder may use to re-encrypt a Wii group (0: Dolphin's own scheduling).
 class OrderedBlobReading
 {
 public:
@@ -154,12 +159,15 @@ public:
   static constexpr u64 WHOLE_PIECES = 0;
 
   OrderedBlobReading(std::vector<std::unique_ptr<DiscIO::BlobReader>> readers, u64 total,
-                     std::shared_ptr<ChunkPool> pool, u64 read_size = BLOCK_READS);
+                     std::shared_ptr<ChunkPool> pool, u64 read_size = BLOCK_READS,
+                     u64 first_piece = 0, unsigned group_threads = 0);
   ~OrderedBlobReading();
   OrderedBlobReading(const OrderedBlobReading&) = delete;
   OrderedBlobReading& operator=(const OrderedBlobReading&) = delete;
 
   u64 PieceCount() const { return m_pieces; }
+  // Where piece i starts.
+  u64 PieceOffset(u64 i) const { return i == 0 ? 0 : m_first + (i - 1) * m_piece; }
   // The next piece, or nullptr if reading it failed.
   Chunk Next();
 
@@ -168,6 +176,8 @@ private:
   void Stop();
 
   u64 m_total;
+  u64 m_piece;
+  u64 m_first;  // the size of piece 0
   u64 m_pieces;
   u64 m_next = 0;
   std::shared_ptr<ChunkPool> m_pool;
@@ -263,4 +273,7 @@ private:
 
 // The size of the pieces disc data is hashed in.
 constexpr size_t HASH_CHUNK_SIZE = 0x200000;
+
+// Sets what WiiGroupThreadCount() returns on this thread.
+void SetWiiGroupThreadCount(unsigned threads);
 }  // namespace wii_gamecube_kit
