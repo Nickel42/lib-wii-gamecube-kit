@@ -100,6 +100,15 @@ target_compile_definitions(lib-wii-gamecube-kit-dolphin PUBLIC
   $<$<PLATFORM_ID:Linux>:_DEFAULT_SOURCE>)
 target_link_libraries(lib-wii-gamecube-kit-dolphin PUBLIC
   fmt::fmt zstd::zstd LibLZMA::LibLZMA BZip2::BZip2 ZLIB::ZLIB MbedTLS::mbedcrypto)
+# Dolphin's ARM64 AES and SHA-1 use the crypto extension's intrinsics, which GCC and the
+# NDK's clang only compile with it enabled (Apple's clang and MSVC have it on already).
+# They're used only after Dolphin's CPU check finds the extension.
+if(NOT MSVC AND NOT APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+  set_source_files_properties(
+    "${DOLPHIN_SRC}/Common/Crypto/AES.cpp"
+    "${DOLPHIN_SRC}/Common/Crypto/SHA1.cpp"
+    PROPERTIES COMPILE_OPTIONS "-march=armv8-a+crypto")
+endif()
 if(MSVC)
   # Dolphin's MSVC settings (its root CMakeLists.txt).
   target_compile_options(lib-wii-gamecube-kit-dolphin PUBLIC
