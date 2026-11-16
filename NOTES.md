@@ -76,6 +76,16 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
   in order), and `HashingBlobReader`, which hashes what a conversion reads.
   On a 1.46 GB synthetic GameCube disc, convert + verify went from 6.3 s
   (convert, hash RVZ, hash ISO, all three hashes each) to 1.4 s (`convert -V`).
+- **Read-ahead (0.2.1):** Dolphin's converters read their input on one thread,
+  one block at a time, waiting for each read (128 KiB for a GameCube disc at the
+  default RVZ block size, 2 MiB for Wii). For a plain ISO/GCM, `convert` reads
+  through `ReadAheadBlobReader`: four more file handles read the disc ahead in
+  4 MiB pieces, in order, and the converter is served from memory. Plain-image
+  hashing reads whole pieces with four handles the same way. From a NAS
+  (an SMB share that manages ~60 MB/s at best), ISO -> RVZ zstd 5 went from 20-22 to
+  42-46 MB/s for GameCube and from 24 to 56 MB/s for Wii, with byte-identical
+  output. From a warm file cache it's as fast as before (0.6 s GameCube, ~2 s Wii
+  on 24 cores). Not used when scrubbing (ScrubbedBlob does its own reads).
 - **Dolphin quirk:** when one `Read` makes the WIA/RVZ reader re-encrypt more
   than one uncached Wii group, hash exceptions collected for the first group
   are applied to the next as well, giving wrong data. Sequential 2 MiB reads
