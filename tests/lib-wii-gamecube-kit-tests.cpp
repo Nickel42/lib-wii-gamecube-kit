@@ -583,6 +583,13 @@ int main(int argc, char** argv)
   synth::WriteFile(clean, synth::MakeWiiDisc(3, false));
   RoundTrip(clean, "wii-clean-rvz", WII_GAMECUBE_KIT_FORMAT_RVZ, WII_GAMECUBE_KIT_COMPRESSION_ZSTD, 5, 0x20000);
 
+  // A plain image is read ahead in 4 MiB pieces; one that isn't a whole number of them
+  // ends with a short piece.
+  const std::string odd = P("synthetic-gc-odd.iso");
+  synth::WriteFile(odd, synth::MakeGameCubeDisc(0xA28000));
+  RoundTrip(odd, "gc-odd-rvz", WII_GAMECUBE_KIT_FORMAT_RVZ, WII_GAMECUBE_KIT_COMPRESSION_ZSTD, 5, 0x20000);
+  RoundTrip(odd, "gc-odd-gcz", WII_GAMECUBE_KIT_FORMAT_GCZ, WII_GAMECUBE_KIT_COMPRESSION_NONE, 0, 0x8000);
+
   wii_gamecube_kit_context_destroy(g_ctx);
   std::printf("%d checks, %d failed\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

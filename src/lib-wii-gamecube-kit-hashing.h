@@ -143,11 +143,18 @@ private:
 // BlobReaders on their own threads. Piece i comes from reader i % readers, so compressed
 // containers (and Wii partitions, which must be re-encrypted and re-hashed) decode in
 // parallel while the pieces still arrive in order.
+//
+// Each reader fetches its piece in Reads of read_size bytes. Decoders need one Wii block
+// (0x8000, the default; see the .cpp). Plain images should read whole pieces: on a network
+// share or a cold disk, several large reads at once are what make reading fast.
 class OrderedBlobReading
 {
 public:
+  static constexpr u64 BLOCK_READS = 0x8000;
+  static constexpr u64 WHOLE_PIECES = 0;
+
   OrderedBlobReading(std::vector<std::unique_ptr<DiscIO::BlobReader>> readers, u64 total,
-                     std::shared_ptr<ChunkPool> pool);
+                     std::shared_ptr<ChunkPool> pool, u64 read_size = BLOCK_READS);
   ~OrderedBlobReading();
   OrderedBlobReading(const OrderedBlobReading&) = delete;
   OrderedBlobReading& operator=(const OrderedBlobReading&) = delete;
@@ -206,6 +213,52 @@ private:
   std::shared_ptr<ChunkPool> m_pool;
   ParallelHasher m_hasher;
   u64 m_hashed = 0;  // [0, m_hashed) has gone to the hasher
+};
+
+// The BlobReader a conversion of a plain image (ISO/GCM) reads through. Dolphin's
+// converters read their input on one thread, one block at a time (128 KiB for a GameCube
+// disc at the default RVZ block size), and wait for each read. That's fine when the image
+// is in the file cache, but on a network share or a cold disk the reading sets the pace:
+// on a NAS, 128 KiB reads one after another manage a third of what four 4 MiB reads at
+// once do. This reads the whole disc ahead, in order, with several file handles, and hands
+// the converter what it asks for from memory. Reads the stream can't serve (before the
+// current piece, past the end, or after a read error) go to the first reader directly.
+class ReadAheadBlobReader final : public DiscIO::BlobReader
+{
+public:
+  // inner answers everything else (sizes, types, direct reads); ahead (other readers of
+  // the same image, at least one) read ahead on their own threads.
+  ReadAheadBlobReader(std::unique_ptr<DiscIO::BlobReader> inner,
+                      std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead);
+
+  DiscIO::BlobType GetBlobType() const override { return m_inner->GetBlobType(); }
+  std::unique_ptr<DiscIO::BlobReader> CopyReader() const override { return m_inner->CopyReader(); }
+  u64 GetRawSize() const override { return m_inner->GetRawSize(); }
+  u64 GetDataSize() const override { return m_inner->GetDataSize(); }
+  DiscIO::DataSizeType GetDataSizeType() const override { return m_inner->GetDataSizeType(); }
+  u64 GetBlockSize() const override { return m_inner->GetBlockSize(); }
+  bool HasFastRandomAccessInBlock() const override { return m_inner->HasFastRandomAccessInBlock(); }
+  std::string GetCompressionMethod() const override { return m_inner->GetCompressionMethod(); }
+  std::optional<int> GetCompressionLevel() const override { return m_inner->GetCompressionLevel(); }
+  bool Read(u64 offset, u64 size, u8* out_ptr) override;
+  bool SupportsReadWiiDecrypted(u64 offset, u64 size, u64 partition_data_offset) const override
+  {
+    return m_inner->SupportsReadWiiDecrypted(offset, size, partition_data_offset);
+  }
+  bool ReadWiiDecrypted(u64 offset, u64 size, u8* out_ptr, u64 partition_data_offset) override
+  {
+    return m_inner->ReadWiiDecrypted(offset, size, out_ptr, partition_data_offset);
+  }
+
+  static constexpr size_t PIECE_SIZE = 0x400000;
+  static constexpr unsigned READERS = 4;
+
+private:
+  std::unique_ptr<DiscIO::BlobReader> m_inner;
+  std::unique_ptr<OrderedBlobReading> m_reading;
+  Chunk m_chunk;           // the piece reads are served from
+  u64 m_chunk_start = 0;   // its offset
+  bool m_streaming = true;  // false after a read-ahead failure: read directly from then on
 };
 
 // The size of the pieces disc data is hashed in.

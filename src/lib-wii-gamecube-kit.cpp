@@ -193,6 +193,21 @@ wii_gamecube_kit_status CheckReadable(Operation& op, const char* path, std::uniq
   return WII_GAMECUBE_KIT_OK;
 }
 
+// Up to count more readers of the plain image at path, each with its own file handle.
+// Empty if one can't be opened (or isn't plain), so the caller reads without them.
+std::vector<std::unique_ptr<DiscIO::BlobReader>> PlainReaders(const std::string& path, unsigned count)
+{
+  std::vector<std::unique_ptr<DiscIO::BlobReader>> readers;
+  while (readers.size() < count)
+  {
+    std::unique_ptr<DiscIO::BlobReader> reader = DiscIO::CreateBlobReader(path);
+    if (!reader || reader->GetBlobType() != DiscIO::BlobType::PLAIN)
+      return {};
+    readers.push_back(std::move(reader));
+  }
+  return readers;
+}
+
 // "N of M blocks. Compression ratio R%" (Dolphin's WIA/RVZ progress text) -> R / 100.
 double ParseRatio(const std::string& text)
 {
@@ -623,6 +638,15 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
       }
     }
 
+    // A plain image is read ahead with several file handles (see ReadAheadBlobReader).
+    // Not when scrubbing: ScrubbedBlob reads its own blob, and skips what it scrubs.
+    if (!scrub && blob->GetBlobType() == DiscIO::BlobType::PLAIN)
+    {
+      std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead = PlainReaders(input, wii_gamecube_kit::ReadAheadBlobReader::READERS);
+      if (!ahead.empty())
+        blob = std::make_unique<wii_gamecube_kit::ReadAheadBlobReader>(std::move(blob), std::move(ahead));
+    }
+
     // Hash what the converter reads (after scrubbing, so it's what the output decodes to).
     wii_gamecube_kit::HashingBlobReader* hashing = nullptr;
     if (source_hashes != 0)
@@ -759,13 +783,17 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
 
     // Decoding is the slow part of reading a compressed container (for Wii discs it
     // includes re-encrypting and re-hashing every partition group), so those get several
-    // readers, each decoding its own pieces. Plain images are limited by the disk: one.
+    // readers, each decoding its own pieces. Plain images are limited by the disk, which
+    // (a network share above all) is fastest with a few large reads at once.
     const DiscIO::BlobType type = blob->GetBlobType();
     const bool compressed = type == DiscIO::BlobType::GCZ || type == DiscIO::BlobType::WIA ||
                             type == DiscIO::BlobType::RVZ || type == DiscIO::BlobType::NFS;
+    const bool plain = type == DiscIO::BlobType::PLAIN;
     constexpr unsigned MAX_DECODERS = 6;
     const unsigned decoders =
-        compressed ? std::min(MAX_DECODERS, wii_gamecube_kit::CompressorThreadCount()) : 1;
+        compressed ? std::min(MAX_DECODERS, wii_gamecube_kit::CompressorThreadCount()) :
+        plain      ? wii_gamecube_kit::ReadAheadBlobReader::READERS :
+                     1;
     const u64 block_size = blob->GetBlockSize();
     std::vector<std::unique_ptr<DiscIO::BlobReader>> readers;
     readers.push_back(std::move(blob));
@@ -788,7 +816,10 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
     const std::shared_ptr<wii_gamecube_kit::ChunkPool> pool =
         wii_gamecube_kit::ChunkPool::Create(static_cast<size_t>(piece));
     wii_gamecube_kit::ParallelHasher hasher(opts.hashes, pool);
-    wii_gamecube_kit::OrderedBlobReading reading(std::move(readers), total, pool);
+    wii_gamecube_kit::OrderedBlobReading reading(
+        std::move(readers), total, pool,
+        plain ? wii_gamecube_kit::OrderedBlobReading::WHOLE_PIECES :
+                wii_gamecube_kit::OrderedBlobReading::BLOCK_READS);
 
     for (u64 i = 0; i < reading.PieceCount(); ++i)
     {
