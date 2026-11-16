@@ -86,6 +86,15 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
   42-46 MB/s for GameCube and from 24 to 56 MB/s for Wii, with byte-identical
   output. From a warm file cache it's as fast as before (0.6 s GameCube, ~2 s Wii
   on 24 cores). Not used when scrubbing (ScrubbedBlob does its own reads).
+- **Parallel decoding in convert (0.2.2):** converting from GCZ/WIA/RVZ (to ISO,
+  or WIA/GCZ to RVZ) decoded the input on the converter's one thread. `convert`
+  now reads such input through `ReadAheadBlobReader` with the decoders hash_ex
+  uses (up to 6, within the context's threads, 8 MiB pieces on the Wii group
+  grid, 32 KiB reads). Same bytes out. On a real Wii disc (24 cores, local SSD):
+  WIA bzip2 -> ISO 155 -> 48 s, WIA bzip2 -> RVZ zstd 5 137 -> 31 s, RVZ -> ISO
+  29 -> 26 s (writing the ISO sets the pace); GameCube RVZ -> ISO ~1.7-2.5 ->
+  0.65 s. Memory: about 2 x 8 MiB per decoder. Not used when scrubbing, or with
+  one thread.
 - **Wii groups in parallel decoders (0.2.2):** a decoder re-encrypts and
   re-hashes every 2 MiB Wii group it reads. Dolphin's `EncryptGroup` starts 64
   hashing tasks and one AES task per core for each group, whatever the context's

@@ -707,13 +707,34 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
       }
     }
 
-    // A plain image is read ahead with several file handles (see ReadAheadBlobReader).
-    // Not when scrubbing: ScrubbedBlob reads its own blob, and skips what it scrubs.
+    // A plain image is read ahead with several file handles, and a compressed one with
+    // several decoders, the way hash_ex reads it (see ReadAheadBlobReader). Not when
+    // scrubbing: ScrubbedBlob reads its own blob, and skips what it scrubs.
     if (!scrub && blob->GetBlobType() == DiscIO::BlobType::PLAIN)
     {
       std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead = PlainReaders(input, wii_gamecube_kit::ReadAheadBlobReader::READERS);
       if (!ahead.empty())
         blob = std::make_unique<wii_gamecube_kit::ReadAheadBlobReader>(std::move(blob), std::move(ahead));
+    }
+    else if (!scrub && IsDecoded(blob->GetBlobType()) && DecoderCount() > 1)
+    {
+      std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead;
+      while (ahead.size() < DecoderCount())
+      {
+        std::unique_ptr<DiscIO::BlobReader> reader = DiscIO::CreateBlobReader(input);
+        if (!reader)
+          break;
+        ahead.push_back(std::move(reader));
+      }
+      if (ahead.size() > 1)
+      {
+        const u64 piece = DecodedPieceSize(blob->GetBlockSize(), true);
+        const unsigned group_threads = GroupThreadsPerDecoder(ahead.size());
+        blob = std::make_unique<wii_gamecube_kit::ReadAheadBlobReader>(
+            std::move(blob), std::move(ahead), static_cast<size_t>(piece),
+            wii_gamecube_kit::OrderedBlobReading::BLOCK_READS, WiiGroupPhase(*volume, piece),
+            group_threads);
+      }
     }
 
     // Hash what the converter reads (after scrubbing, so it's what the output decodes to).

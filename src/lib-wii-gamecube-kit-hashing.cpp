@@ -351,13 +351,15 @@ bool HashingBlobReader::Finish(Digests* out)
 // -------------------------------------------------------- ReadAheadBlobReader
 
 ReadAheadBlobReader::ReadAheadBlobReader(std::unique_ptr<DiscIO::BlobReader> inner,
-                                         std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead)
+                                         std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead,
+                                         size_t piece_size, u64 read_size, u64 first_piece,
+                                         unsigned group_threads)
     : m_inner(std::move(inner))
 {
   const u64 total = m_inner->GetDataSize();
   m_reading = std::make_unique<OrderedBlobReading>(std::move(ahead), total,
-                                                   ChunkPool::Create(PIECE_SIZE),
-                                                   OrderedBlobReading::WHOLE_PIECES);
+                                                   ChunkPool::Create(piece_size), read_size,
+                                                   first_piece, group_threads);
   m_chunk = m_reading->Next();
   m_streaming = m_chunk != nullptr;
 }
@@ -372,9 +374,10 @@ bool ReadAheadBlobReader::Read(u64 offset, u64 size, u8* out_ptr)
     // Move on to the piece holding offset. Pieces the converter skips are dropped.
     while (offset >= m_chunk_start + m_chunk->size)
     {
-      if (m_chunk->size < PIECE_SIZE)  // the last piece: offset is past the disc
+      if (m_chunk_index + 1 >= m_reading->PieceCount())  // the last piece: past the disc
         return m_inner->Read(offset, size, out_ptr);
-      m_chunk_start += PIECE_SIZE;
+      m_chunk_start += m_chunk->size;
+      ++m_chunk_index;
       m_chunk = m_reading->Next();
       if (!m_chunk)
       {

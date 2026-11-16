@@ -529,6 +529,57 @@ void TestHashOptions(const std::string& gc_iso, const std::string& wii_iso)
   fs::remove(U8(big_gc));
 }
 
+// Converting from a compressed container reads it ahead with several decoders, each
+// decoding its own 8 MiB pieces (for Wii, aligned to the game partition's groups, and
+// re-encrypting with a share of the threads). The output must be the same bytes as with
+// one thread, which reads it serially through Dolphin alone.
+void TestParallelDecode()
+{
+  const std::string big_wii = P("decode-wii.iso");
+  const std::string big_gc = P("decode-gc.iso");
+  synth::WriteFile(big_wii, synth::MakeWiiDisc(14, true));
+  synth::WriteFile(big_gc, synth::MakeGameCubeDisc(0x2A08000));
+  const std::string packed = P("decode.packed");
+  const std::string serial = P("decode-serial.out");
+  const std::string parallel = P("decode-parallel.out");
+  for (const std::string& iso : {big_wii, big_gc})
+  {
+    const wii_gamecube_kit_hash_result expected = Hash(iso);
+    for (const auto format : {WII_GAMECUBE_KIT_FORMAT_RVZ, WII_GAMECUBE_KIT_FORMAT_WIA, WII_GAMECUBE_KIT_FORMAT_GCZ})
+    {
+      const auto compression = format == WII_GAMECUBE_KIT_FORMAT_RVZ ? WII_GAMECUBE_KIT_COMPRESSION_ZSTD :
+                               format == WII_GAMECUBE_KIT_FORMAT_WIA ? WII_GAMECUBE_KIT_COMPRESSION_LZMA2 :
+                                                                       WII_GAMECUBE_KIT_COMPRESSION_NONE;
+      const uint32_t block = format == WII_GAMECUBE_KIT_FORMAT_RVZ ? 0x20000 :
+                             format == WII_GAMECUBE_KIT_FORMAT_WIA ? 0x200000 : 0x8000;
+      CHECK_STATUS(Convert(iso, packed, format, compression, 1, block), WII_GAMECUBE_KIT_OK);
+      for (const auto target : {WII_GAMECUBE_KIT_FORMAT_ISO, WII_GAMECUBE_KIT_FORMAT_RVZ})
+      {
+        const auto target_compression = target == WII_GAMECUBE_KIT_FORMAT_ISO ? WII_GAMECUBE_KIT_COMPRESSION_NONE :
+                                                                                WII_GAMECUBE_KIT_COMPRESSION_ZSTD;
+        const uint32_t target_block = target == WII_GAMECUBE_KIT_FORMAT_ISO ? 0 : 0x20000;
+        wii_gamecube_kit_context_set_num_threads(g_ctx, 1);
+        CHECK_STATUS(Convert(packed, serial, target, target_compression, 3, target_block), WII_GAMECUBE_KIT_OK);
+        for (const int threads : {0, 3})
+        {
+          wii_gamecube_kit_context_set_num_threads(g_ctx, threads);
+          wii_gamecube_kit_hash_result source;
+          CHECK_STATUS(Convert(packed, parallel, target, target_compression, 3, target_block, true, false, &source),
+                       WII_GAMECUBE_KIT_OK);
+          CHECK(SameFile(serial, parallel));
+          CHECK(SameHashes(source, expected));
+        }
+        wii_gamecube_kit_context_set_num_threads(g_ctx, 0);
+        if (target == WII_GAMECUBE_KIT_FORMAT_ISO)
+          CHECK(SameFile(iso, parallel));
+      }
+    }
+  }
+  CHECK(NoTempFiles());
+  for (const std::string& f : {packed, serial, parallel, big_wii, big_gc})
+    fs::remove(U8(f));
+}
+
 void TestUnicodePaths(const std::string& gc_iso)
 {
   const fs::path dir = g_dir / fs::path(u8"ゲーム テスト");
@@ -576,6 +627,7 @@ int main(int argc, char** argv)
   TestCancel(wii_iso);
   TestScrub(gc_iso);
   TestHashOptions(gc_iso, wii_iso);
+  TestParallelDecode();
   TestUnicodePaths(gc_iso);
 
   // A Wii disc with every hash correct converts too (no hash exceptions).
