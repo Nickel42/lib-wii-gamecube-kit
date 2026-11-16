@@ -10,11 +10,14 @@
 #include <zlib.h>
 
 #include "Common/Crypto/SHA1.h"
+#include "lib-wii-gamecube-kit-hooks.h"
 
 namespace wii_gamecube_kit
 {
 namespace
 {
+thread_local unsigned t_wii_group_threads = 0;
+
 template <typename Bytes>
 std::string Hex(const Bytes& bytes)
 {
@@ -25,6 +28,16 @@ std::string Hex(const Bytes& bytes)
   return hex;
 }
 }  // namespace
+
+unsigned int WiiGroupThreadCount()
+{
+  return t_wii_group_threads;
+}
+
+void SetWiiGroupThreadCount(unsigned threads)
+{
+  t_wii_group_threads = threads;
+}
 
 // ------------------------------------------------------------------ ChunkPool
 
@@ -214,27 +227,31 @@ struct OrderedBlobReading::Worker
 };
 
 OrderedBlobReading::OrderedBlobReading(std::vector<std::unique_ptr<DiscIO::BlobReader>> readers,
-                                       u64 total, std::shared_ptr<ChunkPool> pool, u64 read_size)
-    : m_total(total), m_pool(std::move(pool))
+                                       u64 total, std::shared_ptr<ChunkPool> pool, u64 read_size,
+                                       u64 first_piece, unsigned group_threads)
+    : m_total(total), m_piece(pool->ChunkSize()), m_pool(std::move(pool))
 {
-  const u64 piece = m_pool->ChunkSize();
-  const u64 read_step = read_size == WHOLE_PIECES ? piece : read_size;
-  m_pieces = (total + piece - 1) / piece;
+  m_first = first_piece == 0 ? m_piece : std::min(first_piece, m_piece);
+  const u64 read_step = read_size == WHOLE_PIECES ? m_piece : read_size;
+  m_pieces = total == 0      ? 0 :
+             total <= m_first ? 1 :
+                               1 + (total - m_first + m_piece - 1) / m_piece;
   const u64 count = readers.size();
   for (u64 k = 0; k < count; ++k)
   {
     m_workers.push_back(std::make_unique<Worker>());
     Worker* worker = m_workers.back().get();
     worker->reader = std::move(readers[k]);
-    worker->thread = std::thread([this, worker, k, count, piece, read_step] {
+    worker->thread = std::thread([this, worker, k, count, read_step, group_threads] {
+      SetWiiGroupThreadCount(group_threads);
       for (u64 i = k; i < m_pieces && !m_stop.load(); i += count)
       {
         Chunk chunk;
         try
         {
           chunk = m_pool->Get();
-          const u64 offset = i * piece;
-          chunk->size = static_cast<size_t>(std::min(piece, m_total - offset));
+          const u64 offset = PieceOffset(i);
+          chunk->size = static_cast<size_t>(std::min(i == 0 ? m_first : m_piece, m_total - offset));
           // One Wii block per read. When a single Read makes Dolphin's WIA/RVZ reader
           // re-encrypt more than one Wii group it hasn't cached, the hash exceptions it
           // collected for the first group are applied to the next one too, giving wrong
@@ -334,13 +351,15 @@ bool HashingBlobReader::Finish(Digests* out)
 // -------------------------------------------------------- ReadAheadBlobReader
 
 ReadAheadBlobReader::ReadAheadBlobReader(std::unique_ptr<DiscIO::BlobReader> inner,
-                                         std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead)
+                                         std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead,
+                                         size_t piece_size, u64 read_size, u64 first_piece,
+                                         unsigned group_threads)
     : m_inner(std::move(inner))
 {
   const u64 total = m_inner->GetDataSize();
   m_reading = std::make_unique<OrderedBlobReading>(std::move(ahead), total,
-                                                   ChunkPool::Create(PIECE_SIZE),
-                                                   OrderedBlobReading::WHOLE_PIECES);
+                                                   ChunkPool::Create(piece_size), read_size,
+                                                   first_piece, group_threads);
   m_chunk = m_reading->Next();
   m_streaming = m_chunk != nullptr;
 }
@@ -355,9 +374,10 @@ bool ReadAheadBlobReader::Read(u64 offset, u64 size, u8* out_ptr)
     // Move on to the piece holding offset. Pieces the converter skips are dropped.
     while (offset >= m_chunk_start + m_chunk->size)
     {
-      if (m_chunk->size < PIECE_SIZE)  // the last piece: offset is past the disc
+      if (m_chunk_index + 1 >= m_reading->PieceCount())  // the last piece: past the disc
         return m_inner->Read(offset, size, out_ptr);
-      m_chunk_start += PIECE_SIZE;
+      m_chunk_start += m_chunk->size;
+      ++m_chunk_index;
       m_chunk = m_reading->Next();
       if (!m_chunk)
       {

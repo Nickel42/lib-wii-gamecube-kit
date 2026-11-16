@@ -30,6 +30,7 @@
 #include "DiscIO/ScrubbedBlob.h"
 #include "DiscIO/Volume.h"
 #include "DiscIO/VolumeDisc.h"
+#include "DiscIO/VolumeWii.h"
 #include "DiscIO/WIABlob.h"
 #include "lib-wii-gamecube-kit-hashing.h"
 #include "lib-wii-gamecube-kit-hooks.h"
@@ -206,6 +207,74 @@ std::vector<std::unique_ptr<DiscIO::BlobReader>> PlainReaders(const std::string&
     readers.push_back(std::move(reader));
   }
   return readers;
+}
+
+// Containers whose data is decoded as it's read: decompressed, and for Wii partitions in
+// WIA/RVZ, re-encrypted and re-hashed. Decoding is the slow part of reading them, so they
+// get several readers, each decoding its own pieces.
+bool IsDecoded(DiscIO::BlobType type)
+{
+  return type == DiscIO::BlobType::GCZ || type == DiscIO::BlobType::WIA ||
+         type == DiscIO::BlobType::RVZ || type == DiscIO::BlobType::NFS;
+}
+
+constexpr unsigned MAX_DECODERS = 6;
+
+// Decoders for the calling context: up to MAX_DECODERS, within its thread count.
+unsigned DecoderCount()
+{
+  return std::min(MAX_DECODERS, wii_gamecube_kit::CompressorThreadCount());
+}
+
+// The share of the context's threads each of decoders parallel readers may use to
+// re-encrypt a Wii group (see WiiGroupThreadCount), or 0 for one reader alone, which keeps
+// Dolphin's own scheduling.
+unsigned GroupThreadsPerDecoder(size_t decoders)
+{
+  if (decoders < 2)
+    return 0;
+  return std::max(1u, wii_gamecube_kit::CompressorThreadCount() / static_cast<unsigned>(decoders));
+}
+
+// The piece size for reading a container with block_size blocks: whole blocks where
+// possible, like ConvertToPlain. Parallel pieces are larger, so the decoders' per-piece
+// costs (a Wii group straddling two pieces when they aren't aligned, cache refills) stay
+// small.
+u64 DecodedPieceSize(u64 block_size, bool parallel)
+{
+  const u64 desired = parallel ? 4 * wii_gamecube_kit::HASH_CHUNK_SIZE : wii_gamecube_kit::HASH_CHUNK_SIZE;
+  u64 piece = block_size == 0 ? desired : block_size;
+  while (piece < desired)
+    piece *= 2;
+  return piece;
+}
+
+// The size of a first piece that puts every later boundary of piece-sized pieces on a
+// group boundary of the Wii game partition, or 0 when nothing needs aligning. A decoder
+// re-encrypts (and re-hashes) whole 2 MiB groups, so a group cut by a piece boundary is
+// decoded twice, by both decoders; with the game partition's data at its usual 0xF820000,
+// that's every fifth group of 8 MiB pieces. Only the game partition is aligned: any other
+// (an update partition) is small.
+u64 WiiGroupPhase(const DiscIO::Volume& volume, u64 piece)
+{
+  using DiscIO::VolumeWii;
+  if (volume.GetVolumeType() != DiscIO::Platform::WiiDisc || !volume.HasWiiHashes() ||
+      piece % VolumeWii::GROUP_TOTAL_SIZE != 0)
+  {
+    return 0;
+  }
+  const DiscIO::Partition partition = volume.GetGamePartition();
+  if (partition == DiscIO::PARTITION_NONE)
+    return 0;
+  // Offset 0 of the partition's data is just past the hashes of its first block.
+  const u64 data = volume.PartitionOffsetToRawOffset(0, partition);
+  if (data < VolumeWii::BLOCK_HEADER_SIZE)
+    return 0;
+  const u64 phase = (data - VolumeWii::BLOCK_HEADER_SIZE) % VolumeWii::GROUP_TOTAL_SIZE;
+  // Keep every read of a Wii block within the block (see OrderedBlobReading).
+  if (phase % VolumeWii::BLOCK_TOTAL_SIZE != 0)
+    return 0;
+  return phase;
 }
 
 // "N of M blocks. Compression ratio R%" (Dolphin's WIA/RVZ progress text) -> R / 100.
@@ -638,13 +707,34 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
       }
     }
 
-    // A plain image is read ahead with several file handles (see ReadAheadBlobReader).
-    // Not when scrubbing: ScrubbedBlob reads its own blob, and skips what it scrubs.
+    // A plain image is read ahead with several file handles, and a compressed one with
+    // several decoders, the way hash_ex reads it (see ReadAheadBlobReader). Not when
+    // scrubbing: ScrubbedBlob reads its own blob, and skips what it scrubs.
     if (!scrub && blob->GetBlobType() == DiscIO::BlobType::PLAIN)
     {
       std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead = PlainReaders(input, wii_gamecube_kit::ReadAheadBlobReader::READERS);
       if (!ahead.empty())
         blob = std::make_unique<wii_gamecube_kit::ReadAheadBlobReader>(std::move(blob), std::move(ahead));
+    }
+    else if (!scrub && IsDecoded(blob->GetBlobType()) && DecoderCount() > 1)
+    {
+      std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead;
+      while (ahead.size() < DecoderCount())
+      {
+        std::unique_ptr<DiscIO::BlobReader> reader = DiscIO::CreateBlobReader(input);
+        if (!reader)
+          break;
+        ahead.push_back(std::move(reader));
+      }
+      if (ahead.size() > 1)
+      {
+        const u64 piece = DecodedPieceSize(blob->GetBlockSize(), true);
+        const unsigned group_threads = GroupThreadsPerDecoder(ahead.size());
+        blob = std::make_unique<wii_gamecube_kit::ReadAheadBlobReader>(
+            std::move(blob), std::move(ahead), static_cast<size_t>(piece),
+            wii_gamecube_kit::OrderedBlobReading::BLOCK_READS, WiiGroupPhase(*volume, piece),
+            group_threads);
+      }
     }
 
     // Hash what the converter reads (after scrubbing, so it's what the output decodes to).
@@ -781,19 +871,15 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
     const u64 total = blob->GetDataSize();
     const bool size_is_exact = blob->GetDataSizeType() == DiscIO::DataSizeType::Accurate;
 
-    // Decoding is the slow part of reading a compressed container (for Wii discs it
-    // includes re-encrypting and re-hashing every partition group), so those get several
-    // readers, each decoding its own pieces. Plain images are limited by the disk, which
-    // (a network share above all) is fastest with a few large reads at once.
+    // Compressed containers get several decoders (see IsDecoded). Plain images are
+    // limited by the disk, which (a network share above all) is fastest with a few large
+    // reads at once.
     const DiscIO::BlobType type = blob->GetBlobType();
-    const bool compressed = type == DiscIO::BlobType::GCZ || type == DiscIO::BlobType::WIA ||
-                            type == DiscIO::BlobType::RVZ || type == DiscIO::BlobType::NFS;
+    const bool compressed = IsDecoded(type);
     const bool plain = type == DiscIO::BlobType::PLAIN;
-    constexpr unsigned MAX_DECODERS = 6;
-    const unsigned decoders =
-        compressed ? std::min(MAX_DECODERS, wii_gamecube_kit::CompressorThreadCount()) :
-        plain      ? wii_gamecube_kit::ReadAheadBlobReader::READERS :
-                     1;
+    const unsigned decoders = compressed ? DecoderCount() :
+                              plain      ? wii_gamecube_kit::ReadAheadBlobReader::READERS :
+                                           1;
     const u64 block_size = blob->GetBlockSize();
     std::vector<std::unique_ptr<DiscIO::BlobReader>> readers;
     readers.push_back(std::move(blob));
@@ -805,13 +891,16 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
       readers.push_back(std::move(reader));
     }
 
-    // Whole container blocks per piece where possible, like ConvertToPlain. Parallel
-    // pieces are larger: a Wii group that straddles two pieces is decoded by both.
-    const u64 desired = readers.size() > 1 ? 4 * wii_gamecube_kit::HASH_CHUNK_SIZE :
-                                             wii_gamecube_kit::HASH_CHUNK_SIZE;
-    u64 piece = block_size == 0 ? desired : block_size;
-    while (piece < desired)
-      piece *= 2;
+    const bool parallel = readers.size() > 1;
+    const u64 piece = DecodedPieceSize(block_size, parallel);
+    u64 first_piece = 0;
+    unsigned group_threads = 0;
+    if (compressed && parallel)
+    {
+      if (const std::unique_ptr<DiscIO::VolumeDisc> volume = DiscIO::CreateDisc(path))
+        first_piece = WiiGroupPhase(*volume, piece);
+      group_threads = GroupThreadsPerDecoder(readers.size());
+    }
 
     const std::shared_ptr<wii_gamecube_kit::ChunkPool> pool =
         wii_gamecube_kit::ChunkPool::Create(static_cast<size_t>(piece));
@@ -819,11 +908,12 @@ WII_GAMECUBE_KIT_API wii_gamecube_kit_status WII_GAMECUBE_KIT_CALL wii_gamecube_
     wii_gamecube_kit::OrderedBlobReading reading(
         std::move(readers), total, pool,
         plain ? wii_gamecube_kit::OrderedBlobReading::WHOLE_PIECES :
-                wii_gamecube_kit::OrderedBlobReading::BLOCK_READS);
+                wii_gamecube_kit::OrderedBlobReading::BLOCK_READS,
+        first_piece, group_threads);
 
     for (u64 i = 0; i < reading.PieceCount(); ++i)
     {
-      const u64 pos = i * piece;
+      const u64 pos = reading.PieceOffset(i);
       if (ctx->progress != nullptr &&
           ctx->progress(ctx->progress_user, WII_GAMECUBE_KIT_PHASE_HASHING,
                         static_cast<double>(pos) / static_cast<double>(total), 0.0) != 0)

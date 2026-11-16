@@ -147,6 +147,11 @@ private:
 // Each reader fetches its piece in Reads of read_size bytes. Decoders need one Wii block
 // (0x8000, the default; see the .cpp). Plain images should read whole pieces: on a network
 // share or a cold disk, several large reads at once are what make reading fast.
+//
+// Pieces are the pool's chunk size, except that piece 0 can be shorter (first_piece), to
+// put every later boundary on a Wii group boundary. group_threads is what
+// WiiGroupThreadCount() returns on the readers' threads: the share of the context's
+// threads each decoder may use to re-encrypt a Wii group (0: Dolphin's own scheduling).
 class OrderedBlobReading
 {
 public:
@@ -154,12 +159,15 @@ public:
   static constexpr u64 WHOLE_PIECES = 0;
 
   OrderedBlobReading(std::vector<std::unique_ptr<DiscIO::BlobReader>> readers, u64 total,
-                     std::shared_ptr<ChunkPool> pool, u64 read_size = BLOCK_READS);
+                     std::shared_ptr<ChunkPool> pool, u64 read_size = BLOCK_READS,
+                     u64 first_piece = 0, unsigned group_threads = 0);
   ~OrderedBlobReading();
   OrderedBlobReading(const OrderedBlobReading&) = delete;
   OrderedBlobReading& operator=(const OrderedBlobReading&) = delete;
 
   u64 PieceCount() const { return m_pieces; }
+  // Where piece i starts.
+  u64 PieceOffset(u64 i) const { return i == 0 ? 0 : m_first + (i - 1) * m_piece; }
   // The next piece, or nullptr if reading it failed.
   Chunk Next();
 
@@ -168,6 +176,8 @@ private:
   void Stop();
 
   u64 m_total;
+  u64 m_piece;
+  u64 m_first;  // the size of piece 0
   u64 m_pieces;
   u64 m_next = 0;
   std::shared_ptr<ChunkPool> m_pool;
@@ -215,21 +225,28 @@ private:
   u64 m_hashed = 0;  // [0, m_hashed) has gone to the hasher
 };
 
-// The BlobReader a conversion of a plain image (ISO/GCM) reads through. Dolphin's
-// converters read their input on one thread, one block at a time (128 KiB for a GameCube
-// disc at the default RVZ block size), and wait for each read. That's fine when the image
-// is in the file cache, but on a network share or a cold disk the reading sets the pace:
-// on a NAS, 128 KiB reads one after another manage a third of what four 4 MiB reads at
-// once do. This reads the whole disc ahead, in order, with several file handles, and hands
-// the converter what it asks for from memory. Reads the stream can't serve (before the
-// current piece, past the end, or after a read error) go to the first reader directly.
+// The BlobReader a conversion reads its input through. Dolphin's converters read their
+// input on one thread, one block at a time (128 KiB for a GameCube disc at the default RVZ
+// block size), and wait for each read. For a plain image (ISO/GCM) that's fine when it is
+// in the file cache, but on a network share or a cold disk the reading sets the pace: on a
+// NAS, 128 KiB reads one after another manage a third of what four 4 MiB reads at once do.
+// For a compressed container (GCZ/WIA/RVZ) every block is decompressed, and every Wii group
+// re-encrypted and re-hashed, on that one thread. This reads the whole disc ahead, in
+// order, with several readers (file handles, or decoders each decoding their own pieces),
+// and hands the converter what it asks for from memory. Reads the stream can't serve
+// (before the current piece, past the end, or after a read error) go to the first reader
+// directly.
 class ReadAheadBlobReader final : public DiscIO::BlobReader
 {
 public:
   // inner answers everything else (sizes, types, direct reads); ahead (other readers of
-  // the same image, at least one) read ahead on their own threads.
+  // the same image, at least one) read ahead on their own threads. The defaults suit a
+  // plain image; decoders take the OrderedBlobReading arguments hash_ex uses.
   ReadAheadBlobReader(std::unique_ptr<DiscIO::BlobReader> inner,
-                      std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead);
+                      std::vector<std::unique_ptr<DiscIO::BlobReader>> ahead,
+                      size_t piece_size = PIECE_SIZE,
+                      u64 read_size = OrderedBlobReading::WHOLE_PIECES, u64 first_piece = 0,
+                      unsigned group_threads = 0);
 
   DiscIO::BlobType GetBlobType() const override { return m_inner->GetBlobType(); }
   std::unique_ptr<DiscIO::BlobReader> CopyReader() const override { return m_inner->CopyReader(); }
@@ -257,10 +274,14 @@ private:
   std::unique_ptr<DiscIO::BlobReader> m_inner;
   std::unique_ptr<OrderedBlobReading> m_reading;
   Chunk m_chunk;           // the piece reads are served from
+  u64 m_chunk_index = 0;   // its number
   u64 m_chunk_start = 0;   // its offset
   bool m_streaming = true;  // false after a read-ahead failure: read directly from then on
 };
 
 // The size of the pieces disc data is hashed in.
 constexpr size_t HASH_CHUNK_SIZE = 0x200000;
+
+// Sets what WiiGroupThreadCount() returns on this thread.
+void SetWiiGroupThreadCount(unsigned threads);
 }  // namespace wii_gamecube_kit

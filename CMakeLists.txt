@@ -4,7 +4,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 endif()
 
-project(lib-wii-gamecube-kit VERSION 0.2.1
+project(lib-wii-gamecube-kit VERSION 0.2.2
   DESCRIPTION "Dolphin's GameCube/Wii disc image conversion (RVZ, WIA, GCZ, ISO) as a library"
   LANGUAGES C CXX)
 
@@ -100,6 +100,13 @@ target_compile_definitions(lib-wii-gamecube-kit-dolphin PUBLIC
   $<$<PLATFORM_ID:Linux>:_DEFAULT_SOURCE>)
 target_link_libraries(lib-wii-gamecube-kit-dolphin PUBLIC
   fmt::fmt zstd::zstd LibLZMA::LibLZMA BZip2::BZip2 ZLIB::ZLIB MbedTLS::mbedcrypto)
+# Dolphin's ARM64 code (AES, SHA-1, CRC32 hashing) uses the CRC and crypto extensions'
+# intrinsics, which GCC and the NDK's clang only compile with them enabled, as Dolphin's own
+# build does (Apple's clang and MSVC have them on already). The accelerated paths run only
+# after Dolphin's CPU check finds the extensions.
+if(NOT MSVC AND NOT APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+  target_compile_options(lib-wii-gamecube-kit-dolphin PRIVATE -march=armv8-a+crc+crypto)
+endif()
 if(MSVC)
   # Dolphin's MSVC settings (its root CMakeLists.txt).
   target_compile_options(lib-wii-gamecube-kit-dolphin PUBLIC

@@ -32,9 +32,156 @@
 #include "DiscIO/Filesystem.h"
 #include "DiscIO/Volume.h"
 #include "DiscIO/WiiSaveBanner.h"
+#ifdef WII_GAMECUBE_KIT_BUILD
+#include <deque>
+
+#include "lib-wii-gamecube-kit-hooks.h"
+#endif
 
 namespace DiscIO
 {
+#ifdef WII_GAMECUBE_KIT_BUILD
+// lib-wii-gamecube-kit: hashing and encrypting a group with a set number of threads.
+// Dolphin starts a task per block to hash and one per core to encrypt, which suits one
+// reader using the whole machine. The library's parallel decoders each re-encrypt their
+// own groups at the same time and share the context's thread count between them
+// (wii_gamecube_kit::WiiGroupThreadCount()), so there each group gets only its share.
+namespace
+{
+// The H0 hashes of blocks [8 * sub, 8 * sub + 8), their H1 hash and its copies, and the H2
+// hash of those: the same values as Dolphin's per-block tasks.
+void HashSubgroup(const std::array<u8, VolumeWii::BLOCK_DATA_SIZE> in[],
+                  VolumeWii::HashBlock out[], size_t sub)
+{
+  const size_t base = sub * 8;
+  for (size_t i = base; i < base + 8; ++i)
+  {
+    for (size_t j = 0; j < 31; ++j)
+      out[i].h0[j] = Common::SHA1::CalculateDigest(in[i].data() + j * 0x400, 0x400);
+    out[i].padding_0 = {};
+    out[base].h1[i - base] = Common::SHA1::CalculateDigest(out[i].h0);
+  }
+  out[base].padding_1 = {};
+  for (size_t j = 1; j < 8; ++j)
+    out[base + j].h1 = out[base].h1;
+  out[0].h2[sub] = Common::SHA1::CalculateDigest(out[base].h1);
+}
+
+bool HashGroupWithThreads(const std::array<u8, VolumeWii::BLOCK_DATA_SIZE> in[],
+                          VolumeWii::HashBlock out[],
+                          const std::function<bool(size_t block)>& read_function,
+                          unsigned int threads)
+{
+  constexpr size_t SUBGROUPS = VolumeWii::BLOCKS_PER_GROUP / 8;
+  // This thread reads (decodes) the blocks; up to threads - 1 others hash the subgroups
+  // already read. The last subgroup is hashed here.
+  std::deque<std::future<void>> hashing;
+  bool success = true;
+  for (size_t sub = 0; sub < SUBGROUPS && success; ++sub)
+  {
+    for (size_t i = sub * 8; i < sub * 8 + 8 && success; ++i)
+      success = !read_function || read_function(i);
+    if (!success)
+      break;
+    if (threads <= 1 || sub == SUBGROUPS - 1)
+    {
+      HashSubgroup(in, out, sub);
+      continue;
+    }
+    if (hashing.size() >= threads - 1)
+    {
+      hashing.front().get();
+      hashing.pop_front();
+    }
+    hashing.push_back(
+        std::async(std::launch::async, [in, out, sub] { HashSubgroup(in, out, sub); }));
+  }
+  for (std::future<void>& future : hashing)
+    future.get();
+  if (!success)
+    return false;
+
+  out[0].padding_2 = {};
+  for (size_t j = 1; j < VolumeWii::BLOCKS_PER_GROUP; ++j)
+    out[j].h2 = out[0].h2;
+  return true;
+}
+
+bool EncryptGroupWithThreads(
+    u64 offset, u64 partition_data_offset, u64 partition_data_decrypted_size,
+    const std::array<u8, VolumeWii::AES_KEY_SIZE>& key, BlobReader* blob,
+    std::array<u8, VolumeWii::GROUP_TOTAL_SIZE>* out,
+    const std::function<void(VolumeWii::HashBlock hash_blocks[VolumeWii::BLOCKS_PER_GROUP])>&
+        hash_exception_callback,
+    unsigned int threads)
+{
+  // Reused for every group this thread encrypts. The data isn't cleared first: every block
+  // is read or zero-filled before it's hashed. The hashes are (64 KiB), as Dolphin's are:
+  // HashGroup leaves the H1 and H2 padding of most blocks alone.
+  thread_local std::unique_ptr<std::array<u8, VolumeWii::BLOCK_DATA_SIZE>[]> unencrypted_data;
+  thread_local std::unique_ptr<VolumeWii::HashBlock[]> unencrypted_hashes;
+  if (!unencrypted_data)
+  {
+    unencrypted_data =
+        std::make_unique_for_overwrite<std::array<u8, VolumeWii::BLOCK_DATA_SIZE>[]>(
+            VolumeWii::BLOCKS_PER_GROUP);
+    unencrypted_hashes =
+        std::make_unique_for_overwrite<VolumeWii::HashBlock[]>(VolumeWii::BLOCKS_PER_GROUP);
+  }
+  std::array<u8, VolumeWii::BLOCK_DATA_SIZE>* const data = unencrypted_data.get();
+  VolumeWii::HashBlock* const hashes = unencrypted_hashes.get();
+  std::memset(hashes, 0, sizeof(VolumeWii::HashBlock) * VolumeWii::BLOCKS_PER_GROUP);
+
+  const bool success = HashGroupWithThreads(data, hashes, [&](size_t block) {
+    if (offset + (block + 1) * VolumeWii::BLOCK_DATA_SIZE <= partition_data_decrypted_size)
+    {
+      if (!blob->ReadWiiDecrypted(offset + block * VolumeWii::BLOCK_DATA_SIZE,
+                                  VolumeWii::BLOCK_DATA_SIZE, data[block].data(),
+                                  partition_data_offset))
+      {
+        return false;
+      }
+    }
+    else
+    {
+      data[block].fill(0);
+    }
+    return true;
+  }, threads);
+
+  if (!success)
+    return false;
+
+  if (hash_exception_callback)
+    hash_exception_callback(hashes);
+
+  const auto aes_context = Common::AES::CreateContextEncrypt(key.data());
+  const auto encrypt = [&](size_t start, size_t end) {
+    for (size_t j = start; j < end; ++j)
+    {
+      u8* out_ptr = out->data() + j * VolumeWii::BLOCK_TOTAL_SIZE;
+      aes_context->CryptIvZero(reinterpret_cast<u8*>(&hashes[j]), out_ptr,
+                               VolumeWii::BLOCK_HEADER_SIZE);
+      aes_context->Crypt(out_ptr + 0x3D0, data[j].data(), out_ptr + VolumeWii::BLOCK_HEADER_SIZE,
+                         VolumeWii::BLOCK_DATA_SIZE);
+    }
+  };
+  const size_t tasks = std::clamp<size_t>(threads, 1, VolumeWii::BLOCKS_PER_GROUP);
+  std::vector<std::future<void>> encryption_futures;
+  for (size_t i = 1; i < tasks; ++i)
+  {
+    encryption_futures.push_back(std::async(std::launch::async, encrypt,
+                                            i * VolumeWii::BLOCKS_PER_GROUP / tasks,
+                                            (i + 1) * VolumeWii::BLOCKS_PER_GROUP / tasks));
+  }
+  encrypt(0, VolumeWii::BLOCKS_PER_GROUP / tasks);
+  for (std::future<void>& future : encryption_futures)
+    future.get();
+  return true;
+}
+}  // namespace
+#endif
+
 VolumeWii::VolumeWii(std::unique_ptr<BlobReader> reader)
     : m_reader(std::move(reader)), m_game_partition(PARTITION_NONE),
       m_last_decrypted_block(UINT64_MAX)
@@ -583,6 +730,14 @@ bool VolumeWii::EncryptGroup(
     std::array<u8, GROUP_TOTAL_SIZE>* out,
     const std::function<void(HashBlock hash_blocks[BLOCKS_PER_GROUP])>& hash_exception_callback)
 {
+#ifdef WII_GAMECUBE_KIT_BUILD
+  if (const unsigned int threads = wii_gamecube_kit::WiiGroupThreadCount(); threads != 0)
+  {
+    return EncryptGroupWithThreads(offset, partition_data_offset, partition_data_decrypted_size,
+                                   key, blob, out, hash_exception_callback, threads);
+  }
+#endif
+
   std::vector<std::array<u8, BLOCK_DATA_SIZE>> unencrypted_data(BLOCKS_PER_GROUP);
   std::vector<HashBlock> unencrypted_hashes(BLOCKS_PER_GROUP);
 
