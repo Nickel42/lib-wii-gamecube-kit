@@ -108,6 +108,13 @@ Done and verified on Windows 11 x64 with Visual Studio 2026 (MSVC, Ninja):
   Wii RVZ (4.7 GB, 24 cores, warm cache) takes 2.3 s instead of 2.5 s (the
   SHA-1 thread sets the pace); with 4 threads it's as fast as before on 4 cores
   instead of all 24.
+- **RVZ file lookups race (fixed in 0.2.3):** packing RVZ asks which file each
+  chunk belongs to (`FileSystemGCWii::FindFileInfo`) from every compressor
+  thread, and Dolphin fills that lookup's `std::map` cache on first use with no
+  lock. Two threads filling it at once crashed the conversion (about one run in
+  seven of the test suite on Apple silicon) or could corrupt the cache. The
+  patch builds it under `std::call_once`; `TestRvzFileLookupRace` converts the
+  synthetic discs 100 times each with 16 threads and checks every output.
 - **Dolphin quirk:** when one `Read` makes the WIA/RVZ reader re-encrypt more
   than one uncached Wii group, hash exceptions collected for the first group
   are applied to the next as well, giving wrong data. Sequential 2 MiB reads

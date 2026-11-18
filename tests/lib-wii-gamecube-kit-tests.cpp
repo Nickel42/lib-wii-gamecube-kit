@@ -598,6 +598,29 @@ void TestUnicodePaths(const std::string& gc_iso)
 }
 }  // namespace
 
+void TestRvzFileLookupRace(const std::string& gc_iso, const std::string& wii_iso)
+{
+  // RVZ packing looks up which file each chunk belongs to from every compressor thread,
+  // and the first lookups build the file system's offset cache. That build raced and
+  // could crash or corrupt the cache (vendor/PATCHES.md). Every conversion opens the disc
+  // afresh, so each one starts with an empty cache; the outputs must all be the same.
+  wii_gamecube_kit_context_set_num_threads(g_ctx, 16);
+  for (const std::string& iso : {gc_iso, wii_iso})
+  {
+    const std::string first = P("race-first.rvz");
+    const std::string again = P("race-again.rvz");
+    CHECK_STATUS(Convert(iso, first, WII_GAMECUBE_KIT_FORMAT_RVZ, WII_GAMECUBE_KIT_COMPRESSION_ZSTD, 1, 0x20000), WII_GAMECUBE_KIT_OK);
+    for (int i = 0; i < 100; i++)
+    {
+      CHECK_STATUS(Convert(iso, again, WII_GAMECUBE_KIT_FORMAT_RVZ, WII_GAMECUBE_KIT_COMPRESSION_ZSTD, 1, 0x20000), WII_GAMECUBE_KIT_OK);
+      CHECK(SameFile(first, again));
+      fs::remove(U8(again));
+    }
+    fs::remove(U8(first));
+  }
+  wii_gamecube_kit_context_set_num_threads(g_ctx, 0);
+}
+
 int main(int argc, char** argv)
 {
   g_dir = argc > 1 ? U8(argv[1]) : fs::current_path() / "wii_gamecube_kit_test_work";
@@ -623,6 +646,7 @@ int main(int argc, char** argv)
   TestRoundTrips(gc_iso, wii_iso);
   TestRvzPacksJunk(gc_iso);
   TestDeterministic(wii_iso);
+  TestRvzFileLookupRace(gc_iso, wii_iso);
   TestValidation(gc_iso);
   TestCancel(wii_iso);
   TestScrub(gc_iso);
