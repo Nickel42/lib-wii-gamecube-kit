@@ -5,6 +5,9 @@
 
 #include <map>
 #include <memory>
+#ifdef WII_GAMECUBE_KIT_BUILD
+#include <mutex>
+#endif
 #include <string>
 #include <string_view>
 #include <vector>
@@ -99,6 +102,11 @@ private:
   FileInfoGCWii m_root;
   // Maps the end offset of files to FST indexes
   mutable std::map<u64, u32> m_offset_file_info_cache;
+#ifdef WII_GAMECUBE_KIT_BUILD
+  // RVZ conversion calls FindFileInfo(u64) from every compressor thread at once: the cache is
+  // built exactly once, before any of them reads it.
+  mutable std::once_flag m_offset_file_info_cache_built;
+#endif
 
   std::unique_ptr<FileInfo> FindFileInfo(std::string_view path, const FileInfo& file_info) const;
 };

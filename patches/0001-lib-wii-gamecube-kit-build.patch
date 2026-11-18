@@ -87,6 +87,59 @@ diff -ruN a/Core/DiscIO/Blob.cpp b/Core/DiscIO/Blob.cpp
      if (auto split_blob = SplitPlainFileReader::Create(filename))
        return std::move(split_blob);
  
+diff -ruN a/Core/DiscIO/FileSystemGCWii.cpp b/Core/DiscIO/FileSystemGCWii.cpp
+--- a/Source/Core/DiscIO/FileSystemGCWii.cpp	2026-11-18 13:39:19
++++ b/Source/Core/DiscIO/FileSystemGCWii.cpp	2026-11-18 13:39:19
+@@ -339,8 +339,12 @@
+     return nullptr;
+ 
+   // Build a cache (unless there already is one)
++#ifdef WII_GAMECUBE_KIT_BUILD
++  std::call_once(m_offset_file_info_cache_built, [this] {
++#else
+   if (m_offset_file_info_cache.empty())
+   {
++#endif
+     u32 fst_entries = m_root.GetSize();
+     for (u32 i = 0; i < fst_entries; i++)
+     {
+@@ -352,7 +356,11 @@
+           m_offset_file_info_cache.emplace(file_info.GetOffset() + size, i);
+       }
+     }
++#ifdef WII_GAMECUBE_KIT_BUILD
++  });
++#else
+   }
++#endif
+ 
+   // Get the first file that ends after disc_offset
+   const auto it = m_offset_file_info_cache.upper_bound(disc_offset);
+diff -ruN a/Core/DiscIO/FileSystemGCWii.h b/Core/DiscIO/FileSystemGCWii.h
+--- a/Source/Core/DiscIO/FileSystemGCWii.h	2026-11-18 13:39:19
++++ b/Source/Core/DiscIO/FileSystemGCWii.h	2026-11-18 13:39:19
+@@ -5,6 +5,9 @@
+ 
+ #include <map>
+ #include <memory>
++#ifdef WII_GAMECUBE_KIT_BUILD
++#include <mutex>
++#endif
+ #include <string>
+ #include <string_view>
+ #include <vector>
+@@ -99,6 +102,11 @@
+   FileInfoGCWii m_root;
+   // Maps the end offset of files to FST indexes
+   mutable std::map<u64, u32> m_offset_file_info_cache;
++#ifdef WII_GAMECUBE_KIT_BUILD
++  // RVZ conversion calls FindFileInfo(u64) from every compressor thread at once: the cache is
++  // built exactly once, before any of them reads it.
++  mutable std::once_flag m_offset_file_info_cache_built;
++#endif
+ 
+   std::unique_ptr<FileInfo> FindFileInfo(std::string_view path, const FileInfo& file_info) const;
+ };
 diff -ruN a/Core/DiscIO/MultithreadedCompressor.h b/Core/DiscIO/MultithreadedCompressor.h
 --- a/Source/Core/DiscIO/MultithreadedCompressor.h	2026-10-18 20:19:09.081044900 -0700
 +++ b/Source/Core/DiscIO/MultithreadedCompressor.h	2026-10-18 20:19:09.525696000 -0700

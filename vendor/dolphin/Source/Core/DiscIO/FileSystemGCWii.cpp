@@ -339,8 +339,12 @@ std::unique_ptr<FileInfo> FileSystemGCWii::FindFileInfo(u64 disc_offset) const
     return nullptr;
 
   // Build a cache (unless there already is one)
+#ifdef WII_GAMECUBE_KIT_BUILD
+  std::call_once(m_offset_file_info_cache_built, [this] {
+#else
   if (m_offset_file_info_cache.empty())
   {
+#endif
     u32 fst_entries = m_root.GetSize();
     for (u32 i = 0; i < fst_entries; i++)
     {
@@ -352,7 +356,11 @@ std::unique_ptr<FileInfo> FileSystemGCWii::FindFileInfo(u64 disc_offset) const
           m_offset_file_info_cache.emplace(file_info.GetOffset() + size, i);
       }
     }
+#ifdef WII_GAMECUBE_KIT_BUILD
+  });
+#else
   }
+#endif
 
   // Get the first file that ends after disc_offset
   const auto it = m_offset_file_info_cache.upper_bound(disc_offset);

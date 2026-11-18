@@ -4,7 +4,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 endif()
 
-project(lib-wii-gamecube-kit VERSION 0.2.2
+project(lib-wii-gamecube-kit VERSION 0.2.3
   DESCRIPTION "Dolphin's GameCube/Wii disc image conversion (RVZ, WIA, GCZ, ISO) as a library"
   LANGUAGES C CXX)
 

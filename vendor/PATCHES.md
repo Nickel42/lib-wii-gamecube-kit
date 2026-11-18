@@ -14,6 +14,7 @@ patched files still build inside Dolphin.
 |---|---|---|
 | `DiscIO/Blob.cpp` | No `DirectoryBlobReader` fallback | Extracted-folder input pulls in much more of Dolphin, and NoIntrovert only reads image files |
 | `DiscIO/Volume.cpp` | No `CreateDiscForCore`, WAD volumes or `CachedBlob` | They need Dolphin's config system and memory arenas; the library only opens discs |
+| `DiscIO/FileSystemGCWii.cpp/.h` | `FindFileInfo(u64)` builds its offset cache under `std::call_once` | RVZ conversion calls it from every compressor thread at once; Dolphin's lazy `std::map` fill raced and could crash or corrupt the cache |
 | `DiscIO/MultithreadedCompressor.h` | Thread count from `wii_gamecube_kit::CompressorThreadCount()` | Lets each context set its thread count (`wii_gamecube_kit_context_set_num_threads`), instead of always using every core |
 | `DiscIO/VolumeWii.cpp` | `EncryptGroup` hashes and encrypts with `wii_gamecube_kit::WiiGroupThreadCount()` threads, in reused buffers, when that is not 0 | The library's parallel decoders each re-encrypt Wii groups at once; Dolphin's 64 hashing tasks plus one AES task per core for every 2 MiB group ignore the context's thread count. 0 (every other thread) keeps Dolphin's code |
 | `Core/IOS/ES/Formats.h/.cpp` | No `SharedContentMap` / `UIDSys` | They work on the emulated NAND; only ticket/TMD parsing is needed |
